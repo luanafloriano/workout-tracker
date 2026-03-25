@@ -636,7 +636,15 @@ function renderExerciseCard(exercise, workoutId) {
   const lastSets = exercise.last_sets || [];
   const numSets = exercise.default_sets || 3;
 
-  const headerRow = `
+  const headerRow = exercise.is_unilateral ? `
+    <tr>
+      <th>Set</th>
+      <th>Anterior</th>
+      <th>kg</th>
+      <th>Esq 🦵</th>
+      <th>Dir 🦵</th>
+      <th></th>
+    </tr>` : `
     <tr>
       <th>Set</th>
       <th>Anterior</th>
@@ -651,7 +659,9 @@ function renderExerciseCard(exercise, workoutId) {
   }
 
   const prevSummary = lastSets.length > 0
-    ? `Anterior: ${lastSets[0].weight}kg × ${lastSets[0].reps} reps${lastSets.length > 1 ? ` · ${lastSets.length} séries` : ''}`
+    ? exercise.is_unilateral
+      ? `Anterior: ${lastSets[0].weight}kg · Esq ${lastSets[0].reps_left ?? '—'} / Dir ${lastSets[0].reps_right ?? '—'} reps`
+      : `Anterior: ${lastSets[0].weight}kg × ${lastSets[0].reps} reps${lastSets.length > 1 ? ` · ${lastSets.length} séries` : ''}`
     : 'Sem dados anteriores';
 
   return `
@@ -685,10 +695,36 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
   const last = lastSets.find(s => s.set_number === setNum);
   const key = `${exercise.name}:${setNum}`;
   const isDone = key in state.loggedSets;
+  const isUni = exercise.is_unilateral;
 
-  const prevText = last ? `${last.weight}×${last.reps}` : '—';
   const prefillWeight = last ? last.weight : '';
   const prefillReps = last ? last.reps : '';
+  const prefillLeft = last ? (last.reps_left ?? '') : '';
+  const prefillRight = last ? (last.reps_right ?? '') : '';
+
+  const prevText = isUni
+    ? (last ? `${last.weight}kg · ${last.reps_left ?? '—'}E/${last.reps_right ?? '—'}D` : '—')
+    : (last ? `${last.weight}×${last.reps}` : '—');
+
+  const attrs = (id) => `data-autolog data-exercise="${esc(exercise.name)}" data-set="${setNum}" data-workout="${workoutId}" id="${id}"${isDone ? ' disabled' : ''}`;
+
+  const repsCell = isUni ? `
+      <td>
+        <input class="set-input${prefillLeft && !isDone ? ' prefilled' : ''}" type="number"
+          inputmode="numeric" min="0" placeholder="E" style="width:52px"
+          value="${prefillLeft}" ${attrs(`rl-${cssId(exercise.name)}-${setNum}`)} data-unilateral="1" />
+      </td>
+      <td>
+        <input class="set-input${prefillRight && !isDone ? ' prefilled' : ''}" type="number"
+          inputmode="numeric" min="0" placeholder="D" style="width:52px"
+          value="${prefillRight}" ${attrs(`rr-${cssId(exercise.name)}-${setNum}`)} data-unilateral="1" />
+      </td>` : `
+      <td>
+        <input class="set-input${prefillReps && !isDone ? ' prefilled' : ''}" type="number"
+          inputmode="numeric" min="0" placeholder="—"
+          value="${isDone ? (last ? last.reps : '') : prefillReps}"
+          ${attrs(`r-${cssId(exercise.name)}-${setNum}`)} />
+      </td>`;
 
   return `
     <tr class="set-row${isDone ? ' done-row' : ''}" id="set-row-${cssId(exercise.name)}-${setNum}">
@@ -698,18 +734,9 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
         <input class="set-input${prefillWeight && !isDone ? ' prefilled' : ''}" type="number"
           inputmode="decimal" step="0.5" min="0" placeholder="—"
           value="${isDone ? (last ? last.weight : '') : prefillWeight}"
-          id="w-${cssId(exercise.name)}-${setNum}"
-          data-autolog data-exercise="${esc(exercise.name)}" data-set="${setNum}" data-workout="${workoutId}"
-          ${isDone ? 'disabled' : ''} />
+          ${attrs(`w-${cssId(exercise.name)}-${setNum}`)} />
       </td>
-      <td>
-        <input class="set-input${prefillReps && !isDone ? ' prefilled' : ''}" type="number"
-          inputmode="numeric" min="0" placeholder="—"
-          value="${isDone ? (last ? last.reps : '') : prefillReps}"
-          id="r-${cssId(exercise.name)}-${setNum}"
-          data-autolog data-exercise="${esc(exercise.name)}" data-set="${setNum}" data-workout="${workoutId}"
-          ${isDone ? 'disabled' : ''} />
-      </td>
+      ${repsCell}
       <td>
         <span id="done-${cssId(exercise.name)}-${setNum}"
           style="font-size:18px;display:block;text-align:center;color:${isDone ? 'var(--success)' : 'var(--border)'}">
@@ -777,10 +804,11 @@ async function renderWorkoutDetail(id) {
       <div class="workout-exercise-title">${esc(ex.exercise_name)}</div>
       ${ex.sets.map(s => `
         <div class="set-summary-row">
-          <span class="set-num">Set ${s.set_number}</span>
+          <span class="set-num">Série ${s.set_number}</span>
           <span><strong>${s.weight ?? '—'}</strong> kg</span>
-          <span>×</span>
-          <span><strong>${s.reps ?? '—'}</strong> reps</span>
+          ${s.reps_left != null
+            ? `<span>· Esq <strong>${s.reps_left}</strong> / Dir <strong>${s.reps_right ?? '—'}</strong> reps</span>`
+            : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
           ${s.notes ? `<span class="text-muted text-sm">· ${esc(s.notes)}</span>` : ''}
         </div>`).join('')}
     </div>`).join('');
@@ -837,15 +865,27 @@ async function handleFocusOut(e) {
   if (state.loggedSets[key]) return; // already logged
 
   const weightInput = document.getElementById(`w-${cssId(exerciseName)}-${setNum}`);
-  const repsInput = document.getElementById(`r-${cssId(exerciseName)}-${setNum}`);
+  const isUnilateral = input.dataset.unilateral === '1';
 
   const weight = parseFloat(weightInput?.value);
-  const reps = parseInt(repsInput?.value);
 
-  if (!weight || !reps) return; // ambos precisam estar preenchidos
+  let logData;
+  if (isUnilateral) {
+    const leftInput = document.getElementById(`rl-${cssId(exerciseName)}-${setNum}`);
+    const rightInput = document.getElementById(`rr-${cssId(exerciseName)}-${setNum}`);
+    const repsLeft = parseInt(leftInput?.value);
+    const repsRight = parseInt(rightInput?.value);
+    if (!weight || !repsLeft || !repsRight) return;
+    logData = { exercise_name: exerciseName, set_number: setNum, weight, reps_left: repsLeft, reps_right: repsRight };
+  } else {
+    const repsInput = document.getElementById(`r-${cssId(exerciseName)}-${setNum}`);
+    const reps = parseInt(repsInput?.value);
+    if (!weight || !reps) return;
+    logData = { exercise_name: exerciseName, set_number: setNum, weight, reps };
+  }
 
   try {
-    await api.addLog(workoutId, { exercise_name: exerciseName, set_number: setNum, weight, reps });
+    await api.addLog(workoutId, logData);
     state.loggedSets[key] = true;
     state.workoutSetCount++;
     markSetDone(exerciseName, setNum);
@@ -861,11 +901,11 @@ async function handleFocusOut(e) {
 function markSetDone(exerciseName, setNum) {
   const row = document.getElementById(`set-row-${cssId(exerciseName)}-${setNum}`);
   if (row) row.classList.add('done-row');
-  const w = document.getElementById(`w-${cssId(exerciseName)}-${setNum}`);
-  const r = document.getElementById(`r-${cssId(exerciseName)}-${setNum}`);
+  ['w', 'r', 'rl', 'rr'].forEach(prefix => {
+    const el = document.getElementById(`${prefix}-${cssId(exerciseName)}-${setNum}`);
+    if (el) el.disabled = true;
+  });
   const indicator = document.getElementById(`done-${cssId(exerciseName)}-${setNum}`);
-  if (w) w.disabled = true;
-  if (r) r.disabled = true;
   if (indicator) { indicator.textContent = '✓'; indicator.style.color = 'var(--success)'; }
 }
 
@@ -1077,33 +1117,40 @@ function showNewTemplateModal() {
 
 function showAddExerciseModal(templateId) {
   const overlay = showModal(`
-    <div class="modal-title">Add Exercise</div>
+    <div class="modal-title">Adicionar Exercício</div>
     <form id="add-exercise-form">
       <div class="form-group">
-        <label class="form-label">Exercise Name</label>
-        <input class="form-input" name="name" placeholder="e.g. Bench Press" required autofocus />
+        <label class="form-label">Nome do Exercício</label>
+        <input class="form-input" name="name" placeholder="Ex: Supino, Rosca Direta..." required autofocus />
       </div>
       <div class="form-group">
-        <label class="form-label">Default Sets</label>
+        <label class="form-label">Séries padrão</label>
         <input class="form-input" name="default_sets" type="number" min="1" max="20" value="3" />
       </div>
-      <button type="submit" class="btn btn-primary btn-lg">Add Exercise</button>
+      <div class="form-group" style="display:flex;align-items:center;gap:10px;padding:12px 14px;background:var(--primary-light);border-radius:var(--radius-sm);border:1px solid var(--border);">
+        <input type="checkbox" name="is_unilateral" id="is_unilateral" style="width:20px;height:20px;accent-color:var(--primary);cursor:pointer;" />
+        <label for="is_unilateral" style="cursor:pointer;font-weight:600;color:var(--text);font-size:14px;">
+          É unilateral? <span style="font-size:12px;color:var(--text-muted);font-weight:400">(registra reps esquerda e direita separado)</span>
+        </label>
+      </div>
+      <button type="submit" class="btn btn-primary btn-lg">Adicionar</button>
     </form>`);
 
   overlay.querySelector('#add-exercise-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const btn = e.target.querySelector('button[type=submit]');
-    btn.disabled = true; btn.textContent = 'Adding…';
+    btn.disabled = true; btn.textContent = 'Adicionando…';
     try {
       await api.addExercise(templateId, {
         name: e.target.name.value,
         default_sets: parseInt(e.target.default_sets.value) || 3,
+        is_unilateral: e.target.is_unilateral.checked,
       });
       overlay.remove();
       navigate('template-detail', { id: templateId });
     } catch (ex) {
       showToast(ex.message, 'error');
-      btn.disabled = false; btn.textContent = 'Add Exercise';
+      btn.disabled = false; btn.textContent = 'Adicionar';
     }
   });
 }

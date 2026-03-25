@@ -127,6 +127,8 @@ async function get(req, res) {
         set_number: log.set_number,
         weight: log.weight,
         reps: log.reps,
+        reps_left: log.reps_left,
+        reps_right: log.reps_right,
         notes: log.notes,
       });
     }
@@ -170,36 +172,33 @@ async function remove(req, res) {
 }
 
 async function addLog(req, res) {
-  const { exercise_name, set_number, weight, reps, notes } = req.body;
+  const { exercise_name, set_number, weight, reps, reps_left, reps_right, notes } = req.body;
 
   if (!exercise_name || !set_number) {
     return res.status(400).json({ error: 'exercise_name and set_number are required' });
   }
 
   try {
-    // Verify workout belongs to user and is active
     const workout = await db.query(
       'SELECT id FROM workouts WHERE id = $1 AND user_id = $2 AND completed_at IS NULL',
       [req.params.id, req.user.id]
     );
     if (!workout.rows[0]) return res.status(404).json({ error: 'Active workout not found' });
 
-    // Upsert: if this set was already logged, update it
     const result = await db.query(
-      `INSERT INTO exercise_logs (workout_id, exercise_name, set_number, weight, reps, notes)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO exercise_logs (workout_id, exercise_name, set_number, weight, reps, reps_left, reps_right, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        ON CONFLICT DO NOTHING
        RETURNING *`,
-      [req.params.id, exercise_name, set_number, weight || null, reps || null, notes || null]
+      [req.params.id, exercise_name, set_number, weight || null, reps || null, reps_left || null, reps_right || null, notes || null]
     );
 
     if (!result.rows[0]) {
-      // Row already existed — update it
       const updated = await db.query(
-        `UPDATE exercise_logs SET weight = $1, reps = $2, notes = $3
-         WHERE workout_id = $4 AND exercise_name = $5 AND set_number = $6
+        `UPDATE exercise_logs SET weight = $1, reps = $2, reps_left = $3, reps_right = $4, notes = $5
+         WHERE workout_id = $6 AND exercise_name = $7 AND set_number = $8
          RETURNING *`,
-        [weight || null, reps || null, notes || null, req.params.id, exercise_name, set_number]
+        [weight || null, reps || null, reps_left || null, reps_right || null, notes || null, req.params.id, exercise_name, set_number]
       );
       return res.json(updated.rows[0]);
     }

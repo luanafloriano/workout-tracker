@@ -87,18 +87,16 @@ async function remove(req, res) {
 }
 
 async function addExercise(req, res) {
-  const { name, default_sets } = req.body;
+  const { name, default_sets, is_unilateral } = req.body;
   if (!name) return res.status(400).json({ error: 'Exercise name is required' });
 
   try {
-    // Verify template ownership
     const template = await db.query(
       'SELECT id FROM workout_templates WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
     if (!template.rows[0]) return res.status(404).json({ error: 'Template not found' });
 
-    // Get next sort order
     const orderResult = await db.query(
       'SELECT COALESCE(MAX(sort_order), -1) + 1 AS next_order FROM template_exercises WHERE template_id = $1',
       [req.params.id]
@@ -106,8 +104,8 @@ async function addExercise(req, res) {
     const sortOrder = orderResult.rows[0].next_order;
 
     const result = await db.query(
-      'INSERT INTO template_exercises (template_id, name, default_sets, sort_order) VALUES ($1, $2, $3, $4) RETURNING *',
-      [req.params.id, name, default_sets || 3, sortOrder]
+      'INSERT INTO template_exercises (template_id, name, default_sets, sort_order, is_unilateral) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [req.params.id, name, default_sets || 3, sortOrder, is_unilateral === true || is_unilateral === 'true']
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {

@@ -47,8 +47,13 @@ CREATE TABLE IF NOT EXISTS exercise_logs (
   logged_at     TIMESTAMP DEFAULT NOW()
 );
 
--- Brio mode per workout (added after initial schema)
+-- Brio mode per workout
 ALTER TABLE workouts ADD COLUMN IF NOT EXISTS brio VARCHAR(20);
+
+-- Unilateral exercises (left/right reps)
+ALTER TABLE template_exercises ADD COLUMN IF NOT EXISTS is_unilateral BOOLEAN DEFAULT FALSE;
+ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS reps_left INTEGER;
+ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS reps_right INTEGER;
 
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_workout_templates_user ON workout_templates(user_id);
