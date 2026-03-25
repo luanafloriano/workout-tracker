@@ -47,6 +47,9 @@ CREATE TABLE IF NOT EXISTS exercise_logs (
   logged_at     TIMESTAMP DEFAULT NOW()
 );
 
+-- Brio mode per workout (added after initial schema)
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS brio VARCHAR(20);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_workout_templates_user ON workout_templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_template_exercises_template ON template_exercises(template_id);

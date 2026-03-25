@@ -86,7 +86,8 @@ async function list(req, res) {
     const result = await db.query(
       `SELECT w.id, w.template_name, w.started_at, w.completed_at, w.notes,
               COUNT(DISTINCT el.exercise_name)::int AS exercise_count,
-              COUNT(el.id)::int AS total_sets
+              COUNT(el.id)::int AS total_sets,
+              w.brio
        FROM workouts w
        LEFT JOIN exercise_logs el ON el.workout_id = w.id
        WHERE w.user_id = $1 AND w.completed_at IS NOT NULL
@@ -139,11 +140,12 @@ async function get(req, res) {
 
 async function complete(req, res) {
   try {
+    const { notes, brio } = req.body;
     const result = await db.query(
-      `UPDATE workouts SET completed_at = NOW(), notes = COALESCE($1, notes)
-       WHERE id = $2 AND user_id = $3 AND completed_at IS NULL
+      `UPDATE workouts SET completed_at = NOW(), notes = COALESCE($1, notes), brio = COALESCE($2, brio)
+       WHERE id = $3 AND user_id = $4 AND completed_at IS NULL
        RETURNING *`,
-      [req.body.notes || null, req.params.id, req.user.id]
+      [notes || null, brio || null, req.params.id, req.user.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Workout not found or already completed' });
     res.json(result.rows[0]);

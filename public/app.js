@@ -6,11 +6,103 @@ const state = {
   user: JSON.parse(localStorage.getItem('user') || 'null'),
   view: null,
   params: {},
-  // Active workout state (kept in memory during workout)
   activeWorkout: null,
   activeExercises: [],
-  loggedSets: {}, // { "exercise_name:set_number": true }
+  loggedSets: {},
+  activeBrio: null,
+  workoutMsgCount: 0,
+  workoutSetCount: 0,
+  greetingShown: false,
 };
+
+// ─────────────────────────────────────────────
+//  Messages
+// ─────────────────────────────────────────────
+function getProfile() {
+  const name = (state.user?.name || '').toLowerCase();
+  if (name.includes('gabriel')) return 'gabriel';
+  if (name.includes('luana')) return 'luana';
+  return 'default';
+}
+
+const MSGS = {
+  luana: {
+    greet: [
+      { icon: '🌸💪', text: 'Bora brio, coração!\nHoje você vai arrasar!' },
+      { icon: '✨🏋️‍♀️', text: 'A Luana mais dedicada do pedaço chegou! 💕' },
+      { icon: '💕🔥', text: 'O Gabriel vai morrer de orgulho de você hoje 😍' },
+      { icon: '🌺💪', text: 'Bora, meu bem!\nEsse treino não sabe o que tá vindo 🌸' },
+      { icon: '🦋✨', text: 'Hoje é dia de superar a Luana de ontem 💕🔥' },
+    ],
+    during: [
+      { icon: '🌸🔥', text: 'Isso aí, coração!\nTá mandando demais 💪' },
+      { icon: '😤💕', text: 'Uiii que poderosa!\nContinua assim, meu bem 🌸' },
+      { icon: '💪✨', text: 'Ei, olha o tanto que você evoluiu!\nOrgulho 🥹💕' },
+      { icon: '🔥💕', text: 'Mais uma série!\nBora brio, coração! 💪' },
+      { icon: '🌺😤', text: 'Ninguém para essa mulher! 🔥\nBora filho do brio!' },
+    ],
+    finish: [
+      { icon: '🎉💕', text: 'Treino concluído!\nVocê é incrível, coração 💪🌸' },
+      { icon: '🏆✨', text: 'ISSO! A Luana arrasou hoje!\nGabriel com sorte 😍💕' },
+    ],
+  },
+  gabriel: {
+    greet: [
+      { icon: '🔥💥', text: 'BORA FILHO DO BRIO, GABRIEL!\nHoje é dia de guerra 💪' },
+      { icon: '⚡🦾', text: 'Acorda, campeão!\nO treino não vai se fazer sozinho 🔥' },
+      { icon: '💪🔥', text: 'Bora brio, Gab!\nA Luana tá na sua torcida 💕🔥' },
+      { icon: '🦾⚡', text: 'GABRIEL EM MODO BRIO TOTAL 🔥\nVAMOS!' },
+      { icon: '😤💥', text: 'Hoje tem treino, monstro!\nBORA FILHO DO BRIO 🔥' },
+    ],
+    during: [
+      { icon: '🔥💥', text: 'ISSO AÍ, FILHO DO BRIO! 💪\nNão para agora!' },
+      { icon: '🦾⚡', text: 'Mais uma série!\nVocê é um monstro 🔥' },
+      { icon: '💕🔥', text: 'A Luana tá orgulhosa de você 💕\nBORA!' },
+      { icon: '😤🔥', text: 'BORA BRIO!\nOlha a força desse homem 🦾⚡' },
+      { icon: '💥🏆', text: 'Quase lá!\nFilho do brio não desiste 🔥💥' },
+    ],
+    finish: [
+      { icon: '🏆🔥', text: 'TREINO DESTRUÍDO!\nFilho do brio demais 💪🔥' },
+      { icon: '💥🦾', text: 'ISSO AÍ GABRIEL!\nA Luana vai surtar de orgulho 😍💕' },
+    ],
+  },
+  default: {
+    greet: [{ icon: '💪🔥', text: 'Bora brio!\nHoje é dia de treino 🔥' }],
+    during: [{ icon: '🔥💪', text: 'Continua assim!\nBora brio 💪' }],
+    finish: [{ icon: '🎉💪', text: 'Treino concluído!\nArrasou 🔥' }],
+  },
+};
+
+function showCuteMessage(msg) {
+  const overlay = document.createElement('div');
+  overlay.className = 'cute-message-overlay';
+  const box = document.createElement('div');
+  box.className = 'cute-message';
+  box.innerHTML = `
+    <div class="cute-message-icon">${msg.icon}</div>
+    <div class="cute-message-text">${msg.text.replace(/\n/g, '<br>')}</div>
+  `;
+  document.body.appendChild(overlay);
+  document.body.appendChild(box);
+  const dismiss = () => { overlay.remove(); box.remove(); };
+  overlay.addEventListener('click', dismiss);
+  box.addEventListener('click', dismiss);
+  setTimeout(dismiss, 4000);
+}
+
+function maybeShowGreeting() {
+  if (state.greetingShown) return;
+  state.greetingShown = true;
+  const msgs = MSGS[getProfile()].greet;
+  setTimeout(() => showCuteMessage(msgs[Math.floor(Math.random() * msgs.length)]), 700);
+}
+
+function maybeShowWorkoutMessage() {
+  if (state.workoutMsgCount >= 2) return;
+  const msgs = MSGS[getProfile()].during;
+  showCuteMessage(msgs[Math.floor(Math.random() * msgs.length)]);
+  state.workoutMsgCount++;
+}
 
 function setAuth(user, token) {
   state.user = user;
@@ -67,7 +159,7 @@ const api = {
 
   startWorkout: (templateId) => apiFetch('POST', '/workouts/start', { template_id: templateId }),
   getActiveWorkout: () => apiFetch('GET', '/workouts/active'),
-  completeWorkout: (id, notes) => apiFetch('PATCH', `/workouts/${id}/complete`, { notes }),
+  completeWorkout: (id, notes, brio) => apiFetch('PATCH', `/workouts/${id}/complete`, { notes, brio }),
   addLog: (workoutId, data) => apiFetch('POST', `/workouts/${workoutId}/logs`, data),
   deleteLog: (workoutId, logId) => apiFetch('DELETE', `/workouts/${workoutId}/logs/${logId}`),
   getWorkouts: () => apiFetch('GET', '/workouts'),
@@ -293,6 +385,7 @@ function bindAuth() {
 //  Dashboard View
 // ─────────────────────────────────────────────
 async function renderDashboard() {
+  maybeShowGreeting();
   const [templates, workouts, activeWorkout] = await Promise.all([
     api.getTemplates().catch(() => []),
     api.getWorkouts().catch(() => []),
@@ -339,22 +432,29 @@ async function renderDashboard() {
         </div>`;
     }).join('');
 
+  const heroChar = getProfile() === 'gabriel' ? '🏋️‍♂️🔥' : getProfile() === 'luana' ? '🏋️‍♀️💕' : '🏋️💪';
+
   return `
     <div class="page">
       <div class="page-header">
         <span style="font-size:22px;">💪</span>
-        <h1>Hi, ${esc(state.user.name)}!</h1>
-        <button class="btn btn-ghost btn-sm" data-action="logout">Logout</button>
+        <h1>Oi, ${esc(state.user.name)}! ✨</h1>
+        <button class="btn btn-ghost btn-sm" data-action="logout">Sair</button>
       </div>
       <div class="page-content">
+        <div class="dashboard-hero">
+          <div class="dashboard-hero-chars">${heroChar}</div>
+          <div class="dashboard-hero-text">Bora brio hoje? 🔥</div>
+          <div class="dashboard-hero-sub">Selecione um template abaixo para começar</div>
+        </div>
         ${activeBanner}
-        <div class="section-title">Start a Workout</div>
+        <div class="section-title">Começar Treino</div>
         <div class="card">${templateCards}</div>
-        ${templates.length > 4 ? `<button class="btn btn-ghost btn-sm mt-2" data-nav="templates">View all templates →</button>` : ''}
+        ${templates.length > 4 ? `<button class="btn btn-ghost btn-sm mt-2" data-nav="templates">Ver todos →</button>` : ''}
 
-        <div class="section-title" style="margin-top:24px">Recent Workouts</div>
+        <div class="section-title" style="margin-top:24px">Histórico Recente</div>
         <div class="card">${recentHtml}</div>
-        ${workouts.length > 3 ? `<button class="btn btn-ghost btn-sm mt-2" data-nav="history">View all history →</button>` : ''}
+        ${workouts.length > 3 ? `<button class="btn btn-ghost btn-sm mt-2" data-nav="history">Ver tudo →</button>` : ''}
       </div>
       ${navHtml('dashboard')}
     </div>`;
@@ -474,6 +574,26 @@ async function renderActiveWorkout() {
     exercises = state.activeExercises;
   }
 
+  // Reset workout message counter and apply brio body class
+  state.workoutMsgCount = 0;
+  state.workoutSetCount = 0;
+  document.body.classList.remove('mode-brio', 'mode-sem-brio');
+  if (state.activeBrio === 'com_brio') document.body.classList.add('mode-brio');
+  if (state.activeBrio === 'sem_brio') document.body.classList.add('mode-sem-brio');
+
+  const brioSelected = state.activeBrio;
+  const brioSelector = `
+    <div class="brio-selector">
+      <button class="brio-btn ${brioSelected === 'com_brio' ? 'selected-brio' : ''}"
+        data-action="select-brio" data-brio="com_brio">
+        🔥 Com Brio
+      </button>
+      <button class="brio-btn ${brioSelected === 'sem_brio' ? 'selected-sem-brio' : ''}"
+        data-action="select-brio" data-brio="sem_brio">
+        💕 Sem Brio
+      </button>
+    </div>`;
+
   const exerciseCards = exercises.map(ex => renderExerciseCard(ex, workout.id)).join('');
 
   // Build last workout summary from last_sets data
@@ -495,6 +615,7 @@ async function renderActiveWorkout() {
         <span class="text-muted text-sm">${formatDate(workout.started_at)}</span>
       </div>
       <div class="page-content" id="workout-exercises">
+        ${brioSelector}
         ${lastWorkoutSummary}
         <div style="margin-bottom:16px;">
           <textarea id="workout-notes" class="form-textarea"
@@ -624,7 +745,8 @@ async function renderHistory() {
           </div>
           <div class="history-info">
             <div class="history-name">${esc(w.template_name)}</div>
-            <div class="history-meta">${w.exercise_count} exercises · ${w.total_sets} sets · ${formatDuration(w.started_at, w.completed_at)}</div>
+            <div class="history-meta">${w.exercise_count} exercícios · ${w.total_sets} séries · ${formatDuration(w.started_at, w.completed_at)}</div>
+            ${w.brio ? `<span class="badge ${w.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}" style="margin-top:4px;display:inline-block">${w.brio === 'com_brio' ? '🔥 Com Brio' : '💕 Sem Brio'}</span>` : ''}
           </div>
           <span style="color:var(--text-light);font-size:16px">›</span>
         </div>`;
@@ -725,7 +847,12 @@ async function handleFocusOut(e) {
   try {
     await api.addLog(workoutId, { exercise_name: exerciseName, set_number: setNum, weight, reps });
     state.loggedSets[key] = true;
+    state.workoutSetCount++;
     markSetDone(exerciseName, setNum);
+    // Show motivational message at 3rd and 7th set
+    if (state.workoutSetCount === 3 || state.workoutSetCount === 7) {
+      setTimeout(maybeShowWorkoutMessage, 400);
+    }
   } catch (ex) {
     showToast(ex.message, 'error');
   }
@@ -776,6 +903,20 @@ async function handleClick(e) {
 
   if (action === 'resume-workout') {
     navigate('workout');
+    return;
+  }
+
+  if (action === 'select-brio') {
+    const brio = btn.dataset.brio;
+    state.activeBrio = brio;
+    document.body.classList.remove('mode-brio', 'mode-sem-brio');
+    if (brio === 'com_brio') document.body.classList.add('mode-brio');
+    if (brio === 'sem_brio') document.body.classList.add('mode-sem-brio');
+    // Update button styles
+    document.querySelectorAll('.brio-btn').forEach(b => {
+      b.classList.remove('selected-brio', 'selected-sem-brio');
+    });
+    btn.classList.add(brio === 'com_brio' ? 'selected-brio' : 'selected-sem-brio');
     return;
   }
 
@@ -846,12 +987,16 @@ async function handleClick(e) {
     btn.disabled = true;
     btn.textContent = 'Salvando…';
     try {
-      await api.completeWorkout(state.activeWorkout.id, notes);
+      await api.completeWorkout(state.activeWorkout.id, notes, state.activeBrio);
+      const finishMsgs = MSGS[getProfile()].finish;
+      const finishMsg = finishMsgs[Math.floor(Math.random() * finishMsgs.length)];
       state.activeWorkout = null;
       state.activeExercises = [];
       state.loggedSets = {};
-      showToast('Treino salvo! 💪');
-      navigate('history');
+      state.activeBrio = null;
+      document.body.classList.remove('mode-brio', 'mode-sem-brio');
+      showCuteMessage(finishMsg);
+      setTimeout(() => navigate('history'), 2000);
     } catch (ex) {
       showToast(ex.message, 'error');
       btn.disabled = false;
@@ -867,6 +1012,8 @@ async function handleClick(e) {
       state.activeWorkout = null;
       state.activeExercises = [];
       state.loggedSets = {};
+      state.activeBrio = null;
+      document.body.classList.remove('mode-brio', 'mode-sem-brio');
       navigate('dashboard');
     } catch (ex) {
       showToast(ex.message, 'error');
