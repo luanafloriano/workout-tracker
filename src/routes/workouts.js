@@ -13,6 +13,7 @@ router.patch('/:id/complete', workouts.complete);
 router.delete('/:id', workouts.remove);
 
 router.post('/:id/logs', workouts.addLog);
+router.put('/:id/logs/:logId', workouts.updateLog);
 router.delete('/:id/logs/:logId', workouts.deleteLog);
 
 module.exports = router;

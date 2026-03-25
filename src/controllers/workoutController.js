@@ -210,6 +210,26 @@ async function addLog(req, res) {
   }
 }
 
+async function updateLog(req, res) {
+  const { weight, reps, reps_left, reps_right, notes } = req.body;
+  try {
+    const result = await db.query(
+      `UPDATE exercise_logs el
+       SET weight = $1, reps = $2, reps_left = $3, reps_right = $4, notes = $5
+       FROM workouts w
+       WHERE el.id = $6 AND el.workout_id = w.id AND w.user_id = $7 AND w.id = $8
+       RETURNING el.*`,
+      [weight ?? null, reps ?? null, reps_left ?? null, reps_right ?? null, notes ?? null,
+       req.params.logId, req.user.id, req.params.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Log not found' });
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update log' });
+  }
+}
+
 async function deleteLog(req, res) {
   try {
     const result = await db.query(
@@ -227,4 +247,4 @@ async function deleteLog(req, res) {
   }
 }
 
-module.exports = { start, getActive, list, get, complete, remove, addLog, deleteLog };
+module.exports = { start, getActive, list, get, complete, remove, addLog, updateLog, deleteLog };

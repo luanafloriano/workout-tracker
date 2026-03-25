@@ -161,6 +161,7 @@ const api = {
   getActiveWorkout: () => apiFetch('GET', '/workouts/active'),
   completeWorkout: (id, notes, brio) => apiFetch('PATCH', `/workouts/${id}/complete`, { notes, brio }),
   addLog: (workoutId, data) => apiFetch('POST', `/workouts/${workoutId}/logs`, data),
+  updateLog: (workoutId, logId, data) => apiFetch('PUT', `/workouts/${workoutId}/logs/${logId}`, data),
   deleteLog: (workoutId, logId) => apiFetch('DELETE', `/workouts/${workoutId}/logs/${logId}`),
   getWorkouts: () => apiFetch('GET', '/workouts'),
   getWorkout: (id) => apiFetch('GET', `/workouts/${id}`),
@@ -643,14 +644,12 @@ function renderExerciseCard(exercise, workoutId) {
       <th>kg</th>
       <th>Esq 🦵</th>
       <th>Dir 🦵</th>
-      <th></th>
     </tr>` : `
     <tr>
       <th>Set</th>
       <th>Anterior</th>
       <th>kg</th>
       <th>Reps</th>
-      <th></th>
     </tr>`;
 
   let setRows = '';
@@ -693,56 +692,36 @@ function renderExerciseCard(exercise, workoutId) {
 
 function renderSetRow(exercise, workoutId, setNum, lastSets) {
   const last = lastSets.find(s => s.set_number === setNum);
-  const key = `${exercise.name}:${setNum}`;
-  const isDone = key in state.loggedSets;
   const isUni = exercise.is_unilateral;
 
-  const prefillWeight = last ? last.weight : '';
-  const prefillReps = last ? last.reps : '';
-  const prefillLeft = last ? (last.reps_left ?? '') : '';
-  const prefillRight = last ? (last.reps_right ?? '') : '';
-
+  // Show previous as reference only — inputs always start empty
   const prevText = isUni
     ? (last ? `${last.weight}kg · ${last.reps_left ?? '—'}E/${last.reps_right ?? '—'}D` : '—')
-    : (last ? `${last.weight}×${last.reps}` : '—');
-
-  const attrs = (id) => `data-autolog data-exercise="${esc(exercise.name)}" data-set="${setNum}" data-workout="${workoutId}" id="${id}"${isDone ? ' disabled' : ''}`;
+    : (last ? `${last.weight}kg × ${last.reps}` : '—');
 
   const repsCell = isUni ? `
       <td>
-        <input class="set-input${prefillLeft && !isDone ? ' prefilled' : ''}" type="number"
-          inputmode="numeric" min="0" placeholder="E" style="width:52px"
-          value="${prefillLeft}" ${attrs(`rl-${cssId(exercise.name)}-${setNum}`)} data-unilateral="1" />
+        <input class="set-input" type="number" inputmode="numeric" min="0" placeholder="E" style="width:52px"
+          id="rl-${cssId(exercise.name)}-${setNum}" />
       </td>
       <td>
-        <input class="set-input${prefillRight && !isDone ? ' prefilled' : ''}" type="number"
-          inputmode="numeric" min="0" placeholder="D" style="width:52px"
-          value="${prefillRight}" ${attrs(`rr-${cssId(exercise.name)}-${setNum}`)} data-unilateral="1" />
+        <input class="set-input" type="number" inputmode="numeric" min="0" placeholder="D" style="width:52px"
+          id="rr-${cssId(exercise.name)}-${setNum}" />
       </td>` : `
       <td>
-        <input class="set-input${prefillReps && !isDone ? ' prefilled' : ''}" type="number"
-          inputmode="numeric" min="0" placeholder="—"
-          value="${isDone ? (last ? last.reps : '') : prefillReps}"
-          ${attrs(`r-${cssId(exercise.name)}-${setNum}`)} />
+        <input class="set-input" type="number" inputmode="numeric" min="0" placeholder="—"
+          id="r-${cssId(exercise.name)}-${setNum}" />
       </td>`;
 
   return `
-    <tr class="set-row${isDone ? ' done-row' : ''}" id="set-row-${cssId(exercise.name)}-${setNum}">
+    <tr class="set-row" id="set-row-${cssId(exercise.name)}-${setNum}">
       <td>${setNum}</td>
       <td class="set-prev">${prevText}</td>
       <td>
-        <input class="set-input${prefillWeight && !isDone ? ' prefilled' : ''}" type="number"
-          inputmode="decimal" step="0.5" min="0" placeholder="—"
-          value="${isDone ? (last ? last.weight : '') : prefillWeight}"
-          ${attrs(`w-${cssId(exercise.name)}-${setNum}`)} />
+        <input class="set-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"
+          id="w-${cssId(exercise.name)}-${setNum}" />
       </td>
       ${repsCell}
-      <td>
-        <span id="done-${cssId(exercise.name)}-${setNum}"
-          style="font-size:18px;display:block;text-align:center;color:${isDone ? 'var(--success)' : 'var(--border)'}">
-          ${isDone ? '✓' : '○'}
-        </span>
-      </td>
     </tr>`;
 }
 
@@ -803,13 +782,22 @@ async function renderWorkoutDetail(id) {
     <div class="workout-exercise-block">
       <div class="workout-exercise-title">${esc(ex.exercise_name)}</div>
       ${ex.sets.map(s => `
-        <div class="set-summary-row">
+        <div class="set-summary-row" style="cursor:pointer"
+          data-action="edit-log"
+          data-workout-id="${workout.id}"
+          data-log-id="${s.id}"
+          data-weight="${s.weight ?? ''}"
+          data-reps="${s.reps ?? ''}"
+          data-reps-left="${s.reps_left ?? ''}"
+          data-reps-right="${s.reps_right ?? ''}"
+          data-is-unilateral="${s.reps_left != null ? '1' : '0'}"
+          title="Toque para editar">
           <span class="set-num">Série ${s.set_number}</span>
           <span><strong>${s.weight ?? '—'}</strong> kg</span>
           ${s.reps_left != null
             ? `<span>· Esq <strong>${s.reps_left}</strong> / Dir <strong>${s.reps_right ?? '—'}</strong> reps</span>`
             : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
-          ${s.notes ? `<span class="text-muted text-sm">· ${esc(s.notes)}</span>` : ''}
+          <span style="margin-left:auto;color:var(--text-light);font-size:13px;">✏️</span>
         </div>`).join('')}
     </div>`).join('');
 
@@ -849,7 +837,6 @@ function bindCurrentView() {
   if (_bound.has(document)) return;
   _bound.add(document);
   document.addEventListener('click', handleClick);
-  document.addEventListener('focusout', handleFocusOut);
 }
 
 // Auto-log a set when user fills both weight and reps
@@ -921,7 +908,12 @@ async function handleClick(e) {
   }
 
   if (action === 'back') {
-    history.back ? history.back() : navigate('dashboard');
+    const backMap = {
+      'template-detail': 'templates',
+      'workout-detail': 'history',
+      'workout': 'dashboard',
+    };
+    navigate(backMap[state.view] || 'dashboard');
     return;
   }
 
@@ -1019,14 +1011,40 @@ async function handleClick(e) {
   }
 
   if (action === 'finish-workout') {
-    const loggedCount = Object.keys(state.loggedSets).length;
-    if (loggedCount === 0) {
-      if (!confirm('Nenhuma série registrada ainda. Finalizar mesmo assim?')) return;
+    // Collect all filled sets from the DOM
+    const logsToSave = [];
+    for (const exercise of state.activeExercises) {
+      const tbody = document.getElementById(`sets-${cssId(exercise.name)}`);
+      if (!tbody) continue;
+      const rows = tbody.querySelectorAll('.set-row');
+      rows.forEach((row, i) => {
+        const setNum = i + 1;
+        const weight = parseFloat(document.getElementById(`w-${cssId(exercise.name)}-${setNum}`)?.value);
+        if (!weight) return; // skip empty rows
+        if (exercise.is_unilateral) {
+          const repsLeft = parseInt(document.getElementById(`rl-${cssId(exercise.name)}-${setNum}`)?.value);
+          const repsRight = parseInt(document.getElementById(`rr-${cssId(exercise.name)}-${setNum}`)?.value);
+          if (repsLeft || repsRight) {
+            logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps_left: repsLeft || null, reps_right: repsRight || null });
+          }
+        } else {
+          const reps = parseInt(document.getElementById(`r-${cssId(exercise.name)}-${setNum}`)?.value);
+          if (reps) logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps });
+        }
+      });
     }
+
+    if (logsToSave.length === 0) {
+      if (!confirm('Nenhuma série preenchida. Finalizar mesmo assim?')) return;
+    }
+
     const notes = document.getElementById('workout-notes')?.value?.trim() || null;
     btn.disabled = true;
     btn.textContent = 'Salvando…';
     try {
+      for (const log of logsToSave) {
+        await api.addLog(state.activeWorkout.id, log);
+      }
       await api.completeWorkout(state.activeWorkout.id, notes, state.activeBrio);
       const finishMsgs = MSGS[getProfile()].finish;
       const finishMsg = finishMsgs[Math.floor(Math.random() * finishMsgs.length)];
@@ -1067,14 +1085,20 @@ async function handleClick(e) {
   }
 
   if (action === 'delete-workout') {
-    if (!confirm('Delete this workout record?')) return;
+    if (!confirm('Apagar este treino?')) return;
     try {
       await api.deleteWorkout(btn.dataset.id);
-      showToast('Workout deleted');
+      showToast('Treino apagado');
       navigate('history');
     } catch (ex) {
       showToast(ex.message, 'error');
     }
+    return;
+  }
+
+  if (action === 'edit-log') {
+    const { workoutId, logId, weight, reps, repsLeft, repsRight, isUnilateral } = btn.dataset;
+    showEditLogModal(workoutId, logId, { weight, reps, reps_left: repsLeft, reps_right: repsRight, is_unilateral: isUnilateral === '1' });
     return;
   }
 }
@@ -1111,6 +1135,70 @@ function showNewTemplateModal() {
     } catch (ex) {
       showToast(ex.message, 'error');
       btn.disabled = false; btn.textContent = 'Create Template';
+    }
+  });
+}
+
+function showEditLogModal(workoutId, logId, current) {
+  const isUni = current.is_unilateral;
+  const overlay = showModal(`
+    <div class="modal-title">✏️ Editar Série</div>
+    <form id="edit-log-form">
+      <div class="form-group">
+        <label class="form-label">Peso (kg)</label>
+        <input class="form-input" name="weight" type="number" step="0.5" min="0"
+          value="${current.weight}" placeholder="kg" required />
+      </div>
+      ${isUni ? `
+      <div class="form-group">
+        <label class="form-label">Reps Esquerda</label>
+        <input class="form-input" name="reps_left" type="number" min="0"
+          value="${current.reps_left}" placeholder="reps" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reps Direita</label>
+        <input class="form-input" name="reps_right" type="number" min="0"
+          value="${current.reps_right}" placeholder="reps" />
+      </div>` : `
+      <div class="form-group">
+        <label class="form-label">Reps</label>
+        <input class="form-input" name="reps" type="number" min="0"
+          value="${current.reps}" placeholder="reps" required />
+      </div>`}
+      <div style="display:flex;gap:10px;margin-top:8px">
+        <button type="submit" class="btn btn-primary" style="flex:1">Salvar</button>
+        <button type="button" class="btn btn-danger btn-sm" id="delete-log-btn">Apagar</button>
+      </div>
+    </form>`);
+
+  overlay.querySelector('#edit-log-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = e.target.querySelector('button[type=submit]');
+    saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
+    try {
+      const data = {
+        weight: parseFloat(e.target.weight?.value) || null,
+        reps: parseInt(e.target.reps?.value) || null,
+        reps_left: parseInt(e.target.reps_left?.value) || null,
+        reps_right: parseInt(e.target.reps_right?.value) || null,
+      };
+      await api.updateLog(workoutId, logId, data);
+      overlay.remove();
+      navigate('workout-detail', { id: workoutId });
+    } catch (ex) {
+      showToast(ex.message, 'error');
+      saveBtn.disabled = false; saveBtn.textContent = 'Salvar';
+    }
+  });
+
+  overlay.querySelector('#delete-log-btn').addEventListener('click', async () => {
+    if (!confirm('Apagar esta série?')) return;
+    try {
+      await api.deleteLog(workoutId, logId);
+      overlay.remove();
+      navigate('workout-detail', { id: workoutId });
+    } catch (ex) {
+      showToast(ex.message, 'error');
     }
   });
 }
