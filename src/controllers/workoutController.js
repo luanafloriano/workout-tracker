@@ -27,7 +27,7 @@ async function start(req, res) {
       exercises.rows.map(async (exercise) => {
         const lastSets = await db.query(
           `WITH last_workout AS (
-            SELECT w.id
+            SELECT w.id, w.completed_at
             FROM workouts w
             JOIN exercise_logs el ON el.workout_id = w.id
             WHERE w.user_id = $1
@@ -36,7 +36,7 @@ async function start(req, res) {
             ORDER BY w.completed_at DESC
             LIMIT 1
           )
-          SELECT el.set_number, el.weight, el.reps
+          SELECT el.set_number, el.weight, el.reps, lw.completed_at AS workout_date
           FROM exercise_logs el
           JOIN last_workout lw ON el.workout_id = lw.id
           WHERE el.exercise_name = $2

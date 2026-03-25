@@ -476,6 +476,18 @@ async function renderActiveWorkout() {
 
   const exerciseCards = exercises.map(ex => renderExerciseCard(ex, workout.id)).join('');
 
+  // Build last workout summary from last_sets data
+  const lastWorkoutDate = exercises.find(ex => ex.last_sets?.length > 0)?.last_sets?.[0]?.workout_date;
+  const lastWorkoutSummary = lastWorkoutDate ? `
+    <div style="background:var(--primary-light);border:1px solid #bfdbfe;border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:16px;font-size:13px;">
+      <div style="font-weight:700;color:var(--primary);margin-bottom:6px;">📊 Último treino — ${formatDate(lastWorkoutDate)}</div>
+      ${exercises.filter(ex => ex.last_sets?.length > 0).map(ex => `
+        <div style="margin-bottom:3px;color:var(--text);">
+          <strong>${esc(ex.name)}:</strong>
+          ${ex.last_sets.map(s => `${s.weight}kg × ${s.reps}`).join(' · ')}
+        </div>`).join('')}
+    </div>` : '';
+
   return `
     <div class="page">
       <div class="page-header">
@@ -483,11 +495,17 @@ async function renderActiveWorkout() {
         <span class="text-muted text-sm">${formatDate(workout.started_at)}</span>
       </div>
       <div class="page-content" id="workout-exercises">
+        ${lastWorkoutSummary}
+        <div style="margin-bottom:16px;">
+          <textarea id="workout-notes" class="form-textarea"
+            placeholder="Observação: como você está hoje? Ex: fadigada, descansada, menstruada..."
+            style="min-height:56px;font-size:14px;"></textarea>
+        </div>
         ${exerciseCards}
       </div>
       <div class="finish-bar">
-        <button class="btn btn-ghost" style="flex:0 0 auto" data-action="discard-workout">Discard</button>
-        <button class="btn btn-success btn-lg" style="flex:1" data-action="finish-workout">Finish Workout</button>
+        <button class="btn btn-ghost" style="flex:0 0 auto" data-action="discard-workout">Descartar</button>
+        <button class="btn btn-success btn-lg" style="flex:1" data-action="finish-workout">Finalizar Treino</button>
       </div>
       ${navHtml('workout')}
     </div>`;
@@ -500,10 +518,10 @@ function renderExerciseCard(exercise, workoutId) {
   const headerRow = `
     <tr>
       <th>Set</th>
-      <th>Previous</th>
+      <th>Anterior</th>
       <th>kg</th>
       <th>Reps</th>
-      <th>✓</th>
+      <th></th>
     </tr>`;
 
   let setRows = '';
@@ -512,8 +530,8 @@ function renderExerciseCard(exercise, workoutId) {
   }
 
   const prevSummary = lastSets.length > 0
-    ? `Last: ${lastSets[0].reps} reps @ ${lastSets[0].weight}${lastSets.length > 1 ? ` · ${lastSets.length} sets` : ''}`
-    : 'No previous data';
+    ? `Anterior: ${lastSets[0].weight}kg × ${lastSets[0].reps} reps${lastSets.length > 1 ? ` · ${lastSets.length} séries` : ''}`
+    : 'Sem dados anteriores';
 
   return `
     <div class="exercise-card" id="exercise-${cssId(exercise.name)}">
@@ -560,6 +578,7 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
           inputmode="decimal" step="0.5" min="0" placeholder="—"
           value="${isDone ? (last ? last.weight : '') : prefillWeight}"
           id="w-${cssId(exercise.name)}-${setNum}"
+          data-autolog data-exercise="${esc(exercise.name)}" data-set="${setNum}" data-workout="${workoutId}"
           ${isDone ? 'disabled' : ''} />
       </td>
       <td>
@@ -567,17 +586,14 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
           inputmode="numeric" min="0" placeholder="—"
           value="${isDone ? (last ? last.reps : '') : prefillReps}"
           id="r-${cssId(exercise.name)}-${setNum}"
+          data-autolog data-exercise="${esc(exercise.name)}" data-set="${setNum}" data-workout="${workoutId}"
           ${isDone ? 'disabled' : ''} />
       </td>
       <td>
-        <button class="set-done-btn${isDone ? ' done' : ''}"
-          data-action="log-set"
-          data-exercise="${esc(exercise.name)}"
-          data-set="${setNum}"
-          data-workout="${workoutId}"
-          ${isDone ? 'disabled' : ''}>
+        <span id="done-${cssId(exercise.name)}-${setNum}"
+          style="font-size:18px;display:block;text-align:center;color:${isDone ? 'var(--success)' : 'var(--border)'}">
           ${isDone ? '✓' : '○'}
-        </button>
+        </span>
       </td>
     </tr>`;
 }
@@ -677,12 +693,53 @@ function bindCurrentView() {
   document.addEventListener('click', handleClick);
 }
 
-// Single delegated handler
+// Single delegated handler — binds once
 const _bound = new WeakSet();
 function bindCurrentView() {
   if (_bound.has(document)) return;
   _bound.add(document);
   document.addEventListener('click', handleClick);
+  document.addEventListener('focusout', handleFocusOut);
+}
+
+// Auto-log a set when user fills both weight and reps
+async function handleFocusOut(e) {
+  const input = e.target.closest('[data-autolog]');
+  if (!input) return;
+
+  const exerciseName = input.dataset.exercise;
+  const setNum = parseInt(input.dataset.set);
+  const workoutId = input.dataset.workout;
+  const key = `${exerciseName}:${setNum}`;
+
+  if (state.loggedSets[key]) return; // already logged
+
+  const weightInput = document.getElementById(`w-${cssId(exerciseName)}-${setNum}`);
+  const repsInput = document.getElementById(`r-${cssId(exerciseName)}-${setNum}`);
+
+  const weight = parseFloat(weightInput?.value);
+  const reps = parseInt(repsInput?.value);
+
+  if (!weight || !reps) return; // ambos precisam estar preenchidos
+
+  try {
+    await api.addLog(workoutId, { exercise_name: exerciseName, set_number: setNum, weight, reps });
+    state.loggedSets[key] = true;
+    markSetDone(exerciseName, setNum);
+  } catch (ex) {
+    showToast(ex.message, 'error');
+  }
+}
+
+function markSetDone(exerciseName, setNum) {
+  const row = document.getElementById(`set-row-${cssId(exerciseName)}-${setNum}`);
+  if (row) row.classList.add('done-row');
+  const w = document.getElementById(`w-${cssId(exerciseName)}-${setNum}`);
+  const r = document.getElementById(`r-${cssId(exerciseName)}-${setNum}`);
+  const indicator = document.getElementById(`done-${cssId(exerciseName)}-${setNum}`);
+  if (w) w.disabled = true;
+  if (r) r.disabled = true;
+  if (indicator) { indicator.textContent = '✓'; indicator.style.color = 'var(--success)'; }
 }
 
 async function handleClick(e) {
@@ -761,47 +818,6 @@ async function handleClick(e) {
     return;
   }
 
-  if (action === 'log-set') {
-    const exerciseName = btn.dataset.exercise;
-    const setNum = parseInt(btn.dataset.set);
-    const workoutId = btn.dataset.workout;
-    const weightInput = document.getElementById(`w-${cssId(exerciseName)}-${setNum}`);
-    const repsInput = document.getElementById(`r-${cssId(exerciseName)}-${setNum}`);
-
-    const weight = parseFloat(weightInput?.value) || null;
-    const reps = parseInt(repsInput?.value) || null;
-
-    btn.disabled = true;
-    btn.textContent = '…';
-
-    try {
-      await api.addLog(workoutId, {
-        exercise_name: exerciseName,
-        set_number: setNum,
-        weight,
-        reps,
-      });
-
-      const key = `${exerciseName}:${setNum}`;
-      state.loggedSets[key] = true;
-
-      // Mark row as done visually
-      const row = document.getElementById(`set-row-${cssId(exerciseName)}-${setNum}`);
-      if (row) {
-        row.classList.add('done-row');
-        if (weightInput) weightInput.disabled = true;
-        if (repsInput) repsInput.disabled = true;
-        btn.classList.add('done');
-        btn.textContent = '✓';
-        btn.disabled = true;
-      }
-    } catch (ex) {
-      showToast(ex.message, 'error');
-      btn.disabled = false;
-      btn.textContent = '○';
-    }
-    return;
-  }
 
   if (action === 'add-set') {
     const exerciseName = btn.dataset.exercise;
@@ -824,27 +840,28 @@ async function handleClick(e) {
   if (action === 'finish-workout') {
     const loggedCount = Object.keys(state.loggedSets).length;
     if (loggedCount === 0) {
-      if (!confirm('No sets logged yet. Finish anyway?')) return;
+      if (!confirm('Nenhuma série registrada ainda. Finalizar mesmo assim?')) return;
     }
+    const notes = document.getElementById('workout-notes')?.value?.trim() || null;
     btn.disabled = true;
-    btn.textContent = 'Saving…';
+    btn.textContent = 'Salvando…';
     try {
-      await api.completeWorkout(state.activeWorkout.id);
+      await api.completeWorkout(state.activeWorkout.id, notes);
       state.activeWorkout = null;
       state.activeExercises = [];
       state.loggedSets = {};
-      showToast('Workout saved! 💪');
+      showToast('Treino salvo! 💪');
       navigate('history');
     } catch (ex) {
       showToast(ex.message, 'error');
       btn.disabled = false;
-      btn.textContent = 'Finish Workout';
+      btn.textContent = 'Finalizar Treino';
     }
     return;
   }
 
   if (action === 'discard-workout') {
-    if (!confirm('Discard this workout? All logged sets will be deleted.')) return;
+    if (!confirm('Descartar este treino? Todas as séries registradas serão apagadas.')) return;
     try {
       await api.deleteWorkout(state.activeWorkout.id);
       state.activeWorkout = null;
