@@ -1,0 +1,18 @@
+{
+  "name": "Workout Tracker 💕",
+  "short_name": "Brio 💪",
+  "description": "O app de treino de vocês dois",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fef6fb",
+  "theme_color": "#f472b6",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

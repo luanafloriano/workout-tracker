@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Background -->
+  <rect width="512" height="512" rx="120" fill="#fdf2f8"/>
+
+  <!-- Dumbbell bar -->
+  <rect x="156" y="236" width="200" height="40" rx="10" fill="#f472b6"/>
+
+  <!-- Left weight outer -->
+  <rect x="100" y="190" width="70" height="132" rx="16" fill="#ec4899"/>
+  <!-- Left weight inner -->
+  <rect x="116" y="210" width="38" height="92" rx="10" fill="#fce7f3"/>
+
+  <!-- Right weight outer -->
+  <rect x="342" y="190" width="70" height="132" rx="16" fill="#ec4899"/>
+  <!-- Right weight inner -->
+  <rect x="358" y="210" width="38" height="92" rx="10" fill="#fce7f3"/>
+
+  <!-- Heart -->
+  <path d="M256 170 C256 170 210 130 185 148 C160 166 162 200 185 220 L256 290 L327 220 C350 200 352 166 327 148 C302 130 256 170 256 170Z"
+    fill="#be185d" opacity="0.9"/>
+</svg>

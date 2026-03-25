@@ -20,6 +20,14 @@ async function register(req, res) {
     return res.status(400).json({ error: 'Password must be at least 6 characters' });
   }
 
+  // Restrict registration to allowed emails only
+  if (process.env.ALLOWED_EMAILS) {
+    const allowed = process.env.ALLOWED_EMAILS.split(',').map(e => e.trim().toLowerCase());
+    if (!allowed.includes(email.toLowerCase())) {
+      return res.status(403).json({ error: 'Este app é privado. Cadastro não permitido.' });
+    }
+  }
+
   try {
     const exists = await db.query('SELECT id FROM users WHERE email = $1', [email.toLowerCase()]);
     if (exists.rows.length > 0) {
