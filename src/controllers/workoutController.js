@@ -349,4 +349,154 @@ async function getProgress(req, res) {
   }
 }
 
-module.exports = { start, getActive, list, get, complete, remove, addLog, updateLog, deleteLog, getPartner, getPartnerWorkout, getProgress };
+// ─── Feed ────────────────────────────────────────────────────────────────────
+
+async function getFeed(req, res) {
+  try {
+    const result = await db.query(
+      `SELECT w.id, w.template_name, w.completed_at, w.brio, w.photo_url,
+              u.id AS user_id, u.name AS user_name,
+              COUNT(DISTINCT wl.id)::int AS like_count,
+              COUNT(DISTINCT wc.id)::int AS comment_count,
+              bool_or(wl.user_id = $1) AS liked_by_me
+       FROM workouts w
+       JOIN users u ON w.user_id = u.id
+       LEFT JOIN workout_likes wl ON wl.workout_id = w.id
+       LEFT JOIN workout_comments wc ON wc.workout_id = w.id
+       WHERE w.completed_at IS NOT NULL AND w.photo_url IS NOT NULL
+       GROUP BY w.id, u.id
+       ORDER BY w.completed_at DESC
+       LIMIT 50`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch feed' });
+  }
+}
+
+async function uploadPhoto(req, res) {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file provided' });
+
+    const workout = await db.query(
+      'SELECT id FROM workouts WHERE id = $1 AND user_id = $2 AND completed_at IS NOT NULL',
+      [req.params.id, req.user.id]
+    );
+    if (!workout.rows[0]) return res.status(404).json({ error: 'Workout not found' });
+
+    const cloudinary = require('../lib/cloudinary');
+    const uploaded = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        { folder: 'workout-tracker', resource_type: 'image' },
+        (err, result) => (err ? reject(err) : resolve(result))
+      );
+      stream.end(req.file.buffer);
+    });
+
+    await db.query(
+      'UPDATE workouts SET photo_url = $1, photo_public_id = $2 WHERE id = $3',
+      [uploaded.secure_url, uploaded.public_id, req.params.id]
+    );
+
+    res.json({ photo_url: uploaded.secure_url });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to upload photo' });
+  }
+}
+
+async function removePhoto(req, res) {
+  try {
+    const workout = await db.query(
+      'SELECT photo_public_id FROM workouts WHERE id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+    if (!workout.rows[0]) return res.status(404).json({ error: 'Workout not found' });
+
+    if (workout.rows[0].photo_public_id) {
+      const cloudinary = require('../lib/cloudinary');
+      await cloudinary.uploader.destroy(workout.rows[0].photo_public_id);
+    }
+
+    await db.query('UPDATE workouts SET photo_url = NULL, photo_public_id = NULL WHERE id = $1', [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to remove photo' });
+  }
+}
+
+async function toggleLike(req, res) {
+  try {
+    const existing = await db.query(
+      'SELECT id FROM workout_likes WHERE workout_id = $1 AND user_id = $2',
+      [req.params.id, req.user.id]
+    );
+    if (existing.rows.length > 0) {
+      await db.query('DELETE FROM workout_likes WHERE workout_id = $1 AND user_id = $2', [req.params.id, req.user.id]);
+      res.json({ liked: false });
+    } else {
+      await db.query('INSERT INTO workout_likes (workout_id, user_id) VALUES ($1, $2)', [req.params.id, req.user.id]);
+      res.json({ liked: true });
+    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to toggle like' });
+  }
+}
+
+async function getComments(req, res) {
+  try {
+    const result = await db.query(
+      `SELECT wc.id, wc.body, wc.created_at, u.name AS user_name, u.id AS user_id
+       FROM workout_comments wc
+       JOIN users u ON wc.user_id = u.id
+       WHERE wc.workout_id = $1
+       ORDER BY wc.created_at ASC`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch comments' });
+  }
+}
+
+async function postComment(req, res) {
+  const { body } = req.body;
+  if (!body?.trim()) return res.status(400).json({ error: 'Comment cannot be empty' });
+  try {
+    const result = await db.query(
+      `INSERT INTO workout_comments (workout_id, user_id, body) VALUES ($1, $2, $3)
+       RETURNING id, body, created_at`,
+      [req.params.id, req.user.id, body.trim()]
+    );
+    res.status(201).json({ ...result.rows[0], user_name: req.user.name, user_id: req.user.id });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to post comment' });
+  }
+}
+
+async function deleteComment(req, res) {
+  try {
+    const result = await db.query(
+      'DELETE FROM workout_comments WHERE id = $1 AND user_id = $2 RETURNING id',
+      [req.params.commentId, req.user.id]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Comment not found' });
+    res.json({ deleted: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete comment' });
+  }
+}
+
+module.exports = {
+  start, getActive, list, get, complete, remove,
+  addLog, updateLog, deleteLog,
+  getPartner, getPartnerWorkout, getProgress,
+  getFeed, uploadPhoto, removePhoto, toggleLike, getComments, postComment, deleteComment,
+};

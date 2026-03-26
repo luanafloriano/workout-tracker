@@ -668,3 +668,88 @@ body {
 .dashboard-hero-chars { font-size: 40px; margin-bottom: 8px; }
 .dashboard-hero-text { font-size: 15px; font-weight: 700; color: #be185d; }
 .dashboard-hero-sub { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+/* ── FEED ───────────────────────────────────── */
+.feed-card {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 0;
+}
+
+.feed-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px 8px;
+  flex-wrap: wrap;
+}
+
+.feed-user {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.feed-meta {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.feed-card-actions {
+  display: flex;
+  gap: 16px;
+  padding: 10px 16px;
+  align-items: center;
+}
+
+.feed-action-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  padding: 4px 0;
+}
+
+.feed-action-btn span {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.feed-action-btn.liked {
+  color: #e11d48;
+}
+
+/* ── COMMENTS ───────────────────────────────── */
+.comment-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.comment-author {
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.comment-body {
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.comment-delete {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-light);
+  font-size: 11px;
+  padding: 0 4px;
+  margin-left: auto;
+}

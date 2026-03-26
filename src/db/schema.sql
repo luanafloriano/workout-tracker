@@ -58,6 +58,27 @@ ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS reps_right INTEGER;
 -- RIR (Reps In Reserve) — percepção de esforço
 ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS rir SMALLINT;
 
+-- Foto do treino (Cloudinary)
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS photo_url TEXT;
+ALTER TABLE workouts ADD COLUMN IF NOT EXISTS photo_public_id TEXT;
+
+-- Curtidas e comentários
+CREATE TABLE IF NOT EXISTS workout_likes (
+  id         SERIAL PRIMARY KEY,
+  workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TIMESTAMP DEFAULT NOW(),
+  UNIQUE(workout_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS workout_comments (
+  id         SERIAL PRIMARY KEY,
+  workout_id INTEGER NOT NULL REFERENCES workouts(id) ON DELETE CASCADE,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  body       TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_workout_templates_user ON workout_templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_template_exercises_template ON template_exercises(template_id);

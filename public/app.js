@@ -169,6 +169,21 @@ const api = {
   getPartnerWorkouts: () => apiFetch('GET', '/workouts/partner'),
   getPartnerWorkout: (id) => apiFetch('GET', `/workouts/partner/${id}`),
   getProgress: (name) => apiFetch('GET', `/workouts/progress/${encodeURIComponent(name)}`),
+  getFeed: () => apiFetch('GET', '/workouts/feed'),
+  uploadPhoto: (workoutId, file) => {
+    const form = new FormData();
+    form.append('photo', file);
+    return fetch(`${API_BASE}/workouts/${workoutId}/photo`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}` },
+      body: form,
+    }).then(r => r.json().then(d => { if (!r.ok) throw new Error(d.error); return d; }));
+  },
+  removePhoto: (workoutId) => apiFetch('DELETE', `/workouts/${workoutId}/photo`),
+  toggleLike: (workoutId) => apiFetch('POST', `/workouts/${workoutId}/like`),
+  getComments: (workoutId) => apiFetch('GET', `/workouts/${workoutId}/comments`),
+  postComment: (workoutId, body) => apiFetch('POST', `/workouts/${workoutId}/comments`, { body }),
+  deleteComment: (workoutId, commentId) => apiFetch('DELETE', `/workouts/${workoutId}/comments/${commentId}`),
 };
 
 // ─────────────────────────────────────────────
@@ -195,6 +210,7 @@ function render() {
     workout: () => renderActiveWorkout(),
     history: renderHistory,
     'workout-detail': () => renderWorkoutDetail(state.params.id),
+    feed: renderFeed,
     partner: renderPartner,
     'partner-detail': () => renderPartnerWorkoutDetail(state.params.id),
     'exercise-progress': () => renderExerciseProgress(state.params.name),
@@ -276,7 +292,7 @@ function navHtml(activeView) {
   const items = [
     { view: 'dashboard', icon: '🏠', label: 'Home' },
     { view: 'templates', icon: '📋', label: 'Templates' },
-    { view: 'partner', icon: '👫', label: 'Parceiro' },
+    { view: 'feed', icon: '📸', label: 'Feed' },
     { view: 'history', icon: '📖', label: 'Histórico' },
   ];
   return `
@@ -896,6 +912,52 @@ async function renderPartnerWorkoutDetail(id) {
     </div>`;
 }
 
+// ─────────────────────────────────────────────
+//  Feed View
+// ─────────────────────────────────────────────
+async function renderFeed() {
+  const posts = await api.getFeed();
+
+  const cards = posts.length === 0 ? `
+    <div class="empty-state">
+      <div class="empty-icon">📸</div>
+      <div class="empty-title">Nenhuma foto ainda</div>
+      <p class="empty-text">Termine um treino e adicione uma foto para aparecer aqui! 💪</p>
+    </div>` :
+    posts.map(p => {
+      const isOwn = p.user_id === state.user.id;
+      return `
+        <div class="feed-card" data-workout-id="${p.id}">
+          <div class="feed-card-header">
+            <span class="feed-user">${esc(p.user_name)}</span>
+            <span class="feed-meta">${esc(p.template_name)} · ${formatDate(p.completed_at)}</span>
+            ${p.brio ? `<span class="badge ${p.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}" style="margin-left:auto">${p.brio === 'com_brio' ? '🔥' : '💕'}</span>` : ''}
+          </div>
+          <img src="${p.photo_url}" style="width:100%;display:block;cursor:pointer"
+            data-action="${isOwn ? 'view-workout' : 'view-partner-workout'}" data-id="${p.id}" />
+          <div class="feed-card-actions">
+            <button class="feed-action-btn ${p.liked_by_me ? 'liked' : ''}" data-action="toggle-like" data-id="${p.id}">
+              ${p.liked_by_me ? '❤️' : '🤍'} <span class="like-count">${p.like_count}</span>
+            </button>
+            <button class="feed-action-btn" data-action="open-comments" data-id="${p.id}">
+              💬 <span>${p.comment_count}</span>
+            </button>
+          </div>
+        </div>`;
+    }).join('');
+
+  return `
+    <div class="page">
+      <div class="page-header">
+        <h1>📸 Feed</h1>
+      </div>
+      <div class="page-content" style="padding:0">
+        ${cards}
+      </div>
+      ${navHtml('feed')}
+    </div>`;
+}
+
 async function renderHistory() {
   const workouts = await api.getWorkouts();
 
@@ -981,6 +1043,17 @@ async function renderWorkoutDetail(id) {
           <span class="badge badge-success">✓ ${workout.exercises.length} exercises</span>
         </div>
         ${workout.notes ? `<div class="alert alert-info" style="margin-bottom:16px">${esc(workout.notes)}</div>` : ''}
+        ${workout.photo_url
+          ? `<div style="position:relative;margin-bottom:16px">
+               <img src="${workout.photo_url}" style="width:100%;border-radius:12px;display:block" />
+               <button class="btn btn-ghost btn-sm" data-action="remove-photo" data-id="${workout.id}"
+                 style="position:absolute;top:8px;right:8px;background:rgba(0,0,0,.5);color:#fff;border:none">🗑</button>
+             </div>`
+          : `<label class="btn btn-outline" style="width:100%;margin-bottom:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px">
+               📸 Adicionar foto
+               <input type="file" accept="image/*" capture="environment" style="display:none"
+                 data-action="upload-photo" data-id="${workout.id}" />
+             </label>`}
         <div class="card card-body">
           ${exercisesHtml || '<p class="text-muted">No exercises logged.</p>'}
         </div>
@@ -1003,6 +1076,20 @@ function bindCurrentView() {
   if (_bound.has(document)) return;
   _bound.add(document);
   document.addEventListener('click', handleClick);
+  document.addEventListener('change', async (e) => {
+    const input = e.target.closest('input[data-action="upload-photo"]');
+    if (!input || !input.files?.[0]) return;
+    const id = input.dataset.id;
+    const label = input.closest('label');
+    if (label) label.textContent = 'Enviando…';
+    try {
+      await api.uploadPhoto(id, input.files[0]);
+      navigate('workout-detail', { id });
+    } catch (ex) {
+      showToast(ex.message, 'error');
+      if (label) label.innerHTML = '📸 Adicionar foto<input type="file" accept="image/*" capture="environment" style="display:none" data-action="upload-photo" data-id="' + id + '" />';
+    }
+  });
 }
 
 // Auto-log a set when user fills both weight and reps
@@ -1285,6 +1372,52 @@ async function handleClick(e) {
     showEditLogModal(workoutId, logId, { weight, reps, reps_left: repsLeft, reps_right: repsRight, rir, is_unilateral: isUnilateral === '1' });
     return;
   }
+
+  if (action === 'upload-photo') {
+    const file = btn.files?.[0];
+    if (!file) return;
+    const id = btn.dataset.id;
+    const label = btn.closest('label');
+    if (label) { label.textContent = 'Enviando…'; }
+    try {
+      await api.uploadPhoto(id, file);
+      navigate('workout-detail', { id });
+    } catch (ex) {
+      showToast(ex.message, 'error');
+      if (label) { label.innerHTML = '📸 Adicionar foto'; }
+    }
+    return;
+  }
+
+  if (action === 'remove-photo') {
+    if (!confirm('Remover foto?')) return;
+    try {
+      await api.removePhoto(btn.dataset.id);
+      navigate('workout-detail', { id: btn.dataset.id });
+    } catch (ex) {
+      showToast(ex.message, 'error');
+    }
+    return;
+  }
+
+  if (action === 'toggle-like') {
+    const id = btn.dataset.id;
+    try {
+      const result = await api.toggleLike(id);
+      btn.classList.toggle('liked', result.liked);
+      btn.querySelector('.like-count').textContent =
+        parseInt(btn.querySelector('.like-count').textContent) + (result.liked ? 1 : -1);
+      btn.firstChild.textContent = result.liked ? '❤️' : '🤍';
+    } catch (ex) {
+      showToast(ex.message, 'error');
+    }
+    return;
+  }
+
+  if (action === 'open-comments') {
+    showCommentsModal(btn.dataset.id);
+    return;
+  }
 }
 
 // ─────────────────────────────────────────────
@@ -1388,6 +1521,69 @@ function showEditLogModal(workoutId, logId, current) {
       await api.deleteLog(workoutId, logId);
       overlay.remove();
       navigate('workout-detail', { id: workoutId });
+    } catch (ex) {
+      showToast(ex.message, 'error');
+    }
+  });
+}
+
+async function showCommentsModal(workoutId) {
+  const comments = await api.getComments(workoutId);
+
+  function renderCommentsList(list) {
+    if (list.length === 0) return '<p class="text-muted text-sm" style="padding:8px 0">Nenhum comentário ainda.</p>';
+    return list.map(c => `
+      <div class="comment-row" data-comment-id="${c.id}" data-user-id="${c.user_id}">
+        <span class="comment-author">${esc(c.user_name)}</span>
+        <span class="comment-body">${esc(c.body)}</span>
+        ${c.user_id === state.user.id
+          ? `<button class="comment-delete" data-action="delete-comment" data-comment-id="${c.id}" data-workout-id="${workoutId}">✕</button>`
+          : ''}
+      </div>`).join('');
+  }
+
+  const overlay = showModal(`
+    <div class="modal-title">💬 Comentários</div>
+    <div id="comments-list" style="max-height:260px;overflow-y:auto;margin-bottom:12px">
+      ${renderCommentsList(comments)}
+    </div>
+    <form id="comment-form" style="display:flex;gap:8px">
+      <input class="form-input" name="body" placeholder="Escreva um comentário…" required style="flex:1" />
+      <button type="submit" class="btn btn-primary btn-sm">Enviar</button>
+    </form>`);
+
+  overlay.querySelector('#comment-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = e.target.body;
+    const body = input.value.trim();
+    if (!body) return;
+    input.value = '';
+    try {
+      const comment = await api.postComment(workoutId, body);
+      const list = overlay.querySelector('#comments-list');
+      list.innerHTML += `
+        <div class="comment-row" data-comment-id="${comment.id}" data-user-id="${comment.user_id}">
+          <span class="comment-author">${esc(comment.user_name)}</span>
+          <span class="comment-body">${esc(comment.body)}</span>
+          <button class="comment-delete" data-action="delete-comment" data-comment-id="${comment.id}" data-workout-id="${workoutId}">✕</button>
+        </div>`;
+      list.scrollTop = list.scrollHeight;
+      // Update comment count in feed if visible
+      const feedBtn = document.querySelector(`[data-action="open-comments"][data-id="${workoutId}"] span`);
+      if (feedBtn) feedBtn.textContent = parseInt(feedBtn.textContent || '0') + 1;
+    } catch (ex) {
+      showToast(ex.message, 'error');
+    }
+  });
+
+  overlay.addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-action="delete-comment"]');
+    if (!btn) return;
+    try {
+      await api.deleteComment(workoutId, btn.dataset.commentId);
+      btn.closest('.comment-row').remove();
+      const feedBtn = document.querySelector(`[data-action="open-comments"][data-id="${workoutId}"] span`);
+      if (feedBtn) feedBtn.textContent = Math.max(0, parseInt(feedBtn.textContent || '1') - 1);
     } catch (ex) {
       showToast(ex.message, 'error');
     }
