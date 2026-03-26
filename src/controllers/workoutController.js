@@ -363,7 +363,7 @@ async function getFeed(req, res) {
        JOIN users u ON w.user_id = u.id
        LEFT JOIN workout_likes wl ON wl.workout_id = w.id
        LEFT JOIN workout_comments wc ON wc.workout_id = w.id
-       WHERE w.completed_at IS NOT NULL AND w.photo_url IS NOT NULL
+       WHERE w.completed_at IS NOT NULL
        GROUP BY w.id, u.id
        ORDER BY w.completed_at DESC
        LIMIT 50`,

@@ -920,12 +920,22 @@ async function renderFeed() {
 
   const cards = posts.length === 0 ? `
     <div class="empty-state">
-      <div class="empty-icon">📸</div>
-      <div class="empty-title">Nenhuma foto ainda</div>
-      <p class="empty-text">Termine um treino e adicione uma foto para aparecer aqui! 💪</p>
+      <div class="empty-icon">💪</div>
+      <div class="empty-title">Nenhum treino ainda</div>
+      <p class="empty-text">Finalize um treino para aparecer aqui!</p>
     </div>` :
     posts.map(p => {
       const isOwn = p.user_id === state.user.id;
+      const photoHtml = p.photo_url
+        ? `<img src="${p.photo_url}" style="width:100%;display:block;cursor:pointer"
+             data-action="${isOwn ? 'view-workout' : 'view-partner-workout'}" data-id="${p.id}" />`
+        : isOwn
+          ? `<label class="feed-add-photo-btn">
+               📸 Adicionar foto
+               <input type="file" accept="image/*" capture="environment" style="display:none"
+                 data-action="upload-photo" data-id="${p.id}" />
+             </label>`
+          : '';
       return `
         <div class="feed-card" data-workout-id="${p.id}">
           <div class="feed-card-header">
@@ -933,14 +943,16 @@ async function renderFeed() {
             <span class="feed-meta">${esc(p.template_name)} · ${formatDate(p.completed_at)}</span>
             ${p.brio ? `<span class="badge ${p.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}" style="margin-left:auto">${p.brio === 'com_brio' ? '🔥' : '💕'}</span>` : ''}
           </div>
-          <img src="${p.photo_url}" style="width:100%;display:block;cursor:pointer"
-            data-action="${isOwn ? 'view-workout' : 'view-partner-workout'}" data-id="${p.id}" />
+          ${photoHtml}
           <div class="feed-card-actions">
             <button class="feed-action-btn ${p.liked_by_me ? 'liked' : ''}" data-action="toggle-like" data-id="${p.id}">
               ${p.liked_by_me ? '❤️' : '🤍'} <span class="like-count">${p.like_count}</span>
             </button>
             <button class="feed-action-btn" data-action="open-comments" data-id="${p.id}">
               💬 <span>${p.comment_count}</span>
+            </button>
+            <button class="feed-action-btn" style="margin-left:auto" data-action="${isOwn ? 'view-workout' : 'view-partner-workout'}" data-id="${p.id}">
+              ver treino ›
             </button>
           </div>
         </div>`;
@@ -1083,11 +1095,28 @@ function bindCurrentView() {
     const label = input.closest('label');
     if (label) label.textContent = 'Enviando…';
     try {
-      await api.uploadPhoto(id, input.files[0]);
-      navigate('workout-detail', { id });
+      const result = await api.uploadPhoto(id, input.files[0]);
+      // If we're in feed, swap the placeholder for the real photo
+      const feedCard = document.querySelector(`.feed-card[data-workout-id="${id}"]`);
+      if (feedCard && result.photo_url) {
+        const addBtn = feedCard.querySelector('.feed-add-photo-btn');
+        if (addBtn) {
+          const img = document.createElement('img');
+          img.src = result.photo_url;
+          img.style.cssText = 'width:100%;display:block;cursor:pointer';
+          img.dataset.action = 'view-workout';
+          img.dataset.id = id;
+          addBtn.replaceWith(img);
+        }
+      } else {
+        // Coming from workout-detail page
+        navigate('feed');
+      }
     } catch (ex) {
       showToast(ex.message, 'error');
-      if (label) label.innerHTML = '📸 Adicionar foto<input type="file" accept="image/*" capture="environment" style="display:none" data-action="upload-photo" data-id="' + id + '" />';
+      if (label) {
+        label.innerHTML = '📸 Adicionar foto<input type="file" accept="image/*" capture="environment" style="display:none" data-action="upload-photo" data-id="' + id + '" />';
+      }
     }
   });
 }
@@ -1315,7 +1344,7 @@ async function handleClick(e) {
       state.activeBrio = null;
       document.body.classList.remove('mode-brio', 'mode-sem-brio');
       showCuteMessage(finishMsg);
-      setTimeout(() => navigate('history'), 2000);
+      setTimeout(() => navigate('feed'), 2000);
     } catch (ex) {
       showToast(ex.message, 'error');
       btn.disabled = false;
