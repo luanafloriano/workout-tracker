@@ -675,7 +675,6 @@ function renderExerciseCard(exercise, workoutId) {
       <th>Esq 🦵</th>
       <th>Dir 🦵</th>
       <th>RIR</th>
-      <th></th>
     </tr>` : `
     <tr>
       <th>Set</th>
@@ -683,7 +682,6 @@ function renderExerciseCard(exercise, workoutId) {
       <th>kg</th>
       <th>Reps</th>
       <th>RIR</th>
-      <th></th>
     </tr>`;
 
   let setRows = '';
@@ -751,7 +749,12 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
   const noteId = `note-${cssId(exercise.name)}-${setNum}`;
   return `
     <tr class="set-row" id="set-row-${cssId(exercise.name)}-${setNum}">
-      <td>${setNum}</td>
+      <td>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
+          <span>${setNum}</span>
+          <button class="btn-set-note" data-action="toggle-set-note" data-target="${noteRowId}" title="Anotação">+</button>
+        </div>
+      </td>
       <td class="set-prev">${prevText}</td>
       <td>
         <input class="set-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"
@@ -761,9 +764,6 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
       <td>
         <input class="set-input" type="number" inputmode="numeric" min="0" max="10" placeholder="RIR" style="width:52px"
           id="rir-${cssId(exercise.name)}-${setNum}" />
-      </td>
-      <td>
-        <button class="btn-set-note" data-action="toggle-set-note" data-target="${noteRowId}" title="Anotação">+</button>
       </td>
     </tr>
     <tr class="set-note-row" id="${noteRowId}" style="display:none">
