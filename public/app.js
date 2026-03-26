@@ -674,12 +674,16 @@ function renderExerciseCard(exercise, workoutId) {
       <th>kg</th>
       <th>Esq 🦵</th>
       <th>Dir 🦵</th>
+      <th>RIR</th>
+      <th></th>
     </tr>` : `
     <tr>
       <th>Set</th>
       <th>Anterior</th>
       <th>kg</th>
       <th>Reps</th>
+      <th>RIR</th>
+      <th></th>
     </tr>`;
 
   let setRows = '';
@@ -743,6 +747,8 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
           id="r-${cssId(exercise.name)}-${setNum}" />
       </td>`;
 
+  const noteRowId = `note-row-${cssId(exercise.name)}-${setNum}`;
+  const noteId = `note-${cssId(exercise.name)}-${setNum}`;
   return `
     <tr class="set-row" id="set-row-${cssId(exercise.name)}-${setNum}">
       <td>${setNum}</td>
@@ -755,6 +761,14 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
       <td>
         <input class="set-input" type="number" inputmode="numeric" min="0" max="10" placeholder="RIR" style="width:52px"
           id="rir-${cssId(exercise.name)}-${setNum}" />
+      </td>
+      <td>
+        <button class="btn-set-note" data-action="toggle-set-note" data-target="${noteRowId}" title="Anotação">+</button>
+      </td>
+    </tr>
+    <tr class="set-note-row" id="${noteRowId}" style="display:none">
+      <td colspan="10" style="padding:4px 8px 8px">
+        <textarea class="set-note-input" id="${noteId}" placeholder="Anotação desta série…" rows="2"></textarea>
       </td>
     </tr>`;
 }
@@ -936,7 +950,8 @@ async function renderWorkoutReadonly(id) {
             ? `<span>· Esq <strong>${s.reps_left}</strong> / Dir <strong>${s.reps_right ?? '—'}</strong></span>`
             : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
           ${s.rir != null ? `<span style="color:var(--text-muted);font-size:12px">RIR ${s.rir}</span>` : ''}
-        </div>`).join('')}
+        </div>
+        ${s.notes ? `<div class="set-note-display">📝 ${esc(s.notes)}</div>` : ''}`).join('')}
     </div>`).join('');
 
   return `
@@ -1080,7 +1095,8 @@ async function renderWorkoutDetail(id) {
             : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
           ${s.rir != null ? `<span style="color:var(--text-muted);font-size:12px">RIR ${s.rir}</span>` : ''}
           <span style="margin-left:auto;color:var(--text-light);font-size:13px;">✏️</span>
-        </div>`).join('')}
+        </div>
+        ${s.notes ? `<div class="set-note-display">📝 ${esc(s.notes)}</div>` : ''}`).join('')}
     </div>`).join('');
 
   return `
@@ -1358,15 +1374,16 @@ async function handleClick(e) {
         if (!weight) return; // skip empty rows
         const rirVal = document.getElementById(`rir-${cssId(exercise.name)}-${setNum}`)?.value;
         const rir = rirVal !== '' && rirVal != null ? parseInt(rirVal) : null;
+        const notes = document.getElementById(`note-${cssId(exercise.name)}-${setNum}`)?.value?.trim() || null;
         if (exercise.is_unilateral) {
           const repsLeft = parseInt(document.getElementById(`rl-${cssId(exercise.name)}-${setNum}`)?.value);
           const repsRight = parseInt(document.getElementById(`rr-${cssId(exercise.name)}-${setNum}`)?.value);
           if (repsLeft || repsRight) {
-            logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps_left: repsLeft || null, reps_right: repsRight || null, rir });
+            logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps_left: repsLeft || null, reps_right: repsRight || null, rir, notes });
           }
         } else {
           const reps = parseInt(document.getElementById(`r-${cssId(exercise.name)}-${setNum}`)?.value);
-          if (reps) logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps, rir });
+          if (reps) logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps, rir, notes });
         }
       });
     }
@@ -1434,6 +1451,16 @@ async function handleClick(e) {
 
   if (action === 'view-workout-readonly') {
     navigate('workout-readonly', { id: btn.dataset.id });
+    return;
+  }
+
+  if (action === 'toggle-set-note') {
+    const row = document.getElementById(btn.dataset.target);
+    if (!row) return;
+    const hidden = row.style.display === 'none';
+    row.style.display = hidden ? 'table-row' : 'none';
+    btn.classList.toggle('active', hidden);
+    if (hidden) row.querySelector('textarea')?.focus();
     return;
   }
 
