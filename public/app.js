@@ -166,6 +166,9 @@ const api = {
   getWorkouts: () => apiFetch('GET', '/workouts'),
   getWorkout: (id) => apiFetch('GET', `/workouts/${id}`),
   deleteWorkout: (id) => apiFetch('DELETE', `/workouts/${id}`),
+  getPartnerWorkouts: () => apiFetch('GET', '/workouts/partner'),
+  getPartnerWorkout: (id) => apiFetch('GET', `/workouts/partner/${id}`),
+  getProgress: (name) => apiFetch('GET', `/workouts/progress/${encodeURIComponent(name)}`),
 };
 
 // ─────────────────────────────────────────────
@@ -192,6 +195,9 @@ function render() {
     workout: () => renderActiveWorkout(),
     history: renderHistory,
     'workout-detail': () => renderWorkoutDetail(state.params.id),
+    partner: renderPartner,
+    'partner-detail': () => renderPartnerWorkoutDetail(state.params.id),
+    'exercise-progress': () => renderExerciseProgress(state.params.name),
   };
   const fn = viewFns[state.view] || renderDashboard;
   fn().then(html => {
@@ -270,7 +276,8 @@ function navHtml(activeView) {
   const items = [
     { view: 'dashboard', icon: '🏠', label: 'Home' },
     { view: 'templates', icon: '📋', label: 'Templates' },
-    { view: 'history', icon: '📖', label: 'History' },
+    { view: 'partner', icon: '👫', label: 'Parceiro' },
+    { view: 'history', icon: '📖', label: 'Histórico' },
   ];
   return `
     <nav class="bottom-nav">
@@ -722,6 +729,10 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
           id="w-${cssId(exercise.name)}-${setNum}" />
       </td>
       ${repsCell}
+      <td>
+        <input class="set-input" type="number" inputmode="numeric" min="0" max="10" placeholder="RIR" style="width:52px"
+          id="rir-${cssId(exercise.name)}-${setNum}" />
+      </td>
     </tr>`;
 }
 
@@ -732,6 +743,159 @@ function cssId(name) {
 // ─────────────────────────────────────────────
 //  History View
 // ─────────────────────────────────────────────
+// ─────────────────────────────────────────────
+//  Line Chart (SVG, no dependencies)
+// ─────────────────────────────────────────────
+function renderLineChart(data, color = '#f472b6') {
+  if (!data || data.length < 2) {
+    return '<p class="text-muted text-sm" style="text-align:center;padding:20px">Poucos dados ainda — continue treinando! 💪</p>';
+  }
+  const W = 320, H = 140, PX = 44, PY = 16;
+  const cW = W - PX * 2, cH = H - PY * 2;
+  const vals = data.map(d => parseFloat(d.max_weight));
+  const minV = Math.min(...vals), maxV = Math.max(...vals);
+  const range = maxV - minV || 1;
+  const pts = data.map((d, i) => ({
+    x: PX + (i / (data.length - 1)) * cW,
+    y: PY + cH - ((parseFloat(d.max_weight) - minV) / range) * cH,
+    ...d,
+  }));
+  const line = pts.map((p, i) => `${i ? 'L' : 'M'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const area = `${line} L${pts[pts.length-1].x.toFixed(1)},${(PY+cH).toFixed(1)} L${pts[0].x.toFixed(1)},${(PY+cH).toFixed(1)}Z`;
+  const dots = pts.map(p => `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}" stroke="#fff" stroke-width="2"/>`).join('');
+  const yLabels = [[minV, PY+cH], [(minV+maxV)/2, PY+cH/2], [maxV, PY]].map(([v,y]) =>
+    `<text x="${PX-6}" y="${y+4}" text-anchor="end" font-size="10" fill="#9c6aad">${v}kg</text>`
+  ).join('');
+  const xLabels = [pts[0], pts[pts.length-1]].map(p =>
+    `<text x="${p.x.toFixed(1)}" y="${H-2}" text-anchor="middle" font-size="9" fill="#d8b4fe">${new Date(p.date).toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}</text>`
+  ).join('');
+  return `
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;display:block;overflow:visible">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${color}" stop-opacity=".25"/>
+        <stop offset="100%" stop-color="${color}" stop-opacity="0"/>
+      </linearGradient></defs>
+      ${yLabels}${xLabels}
+      <path d="${area}" fill="url(#g)"/>
+      <path d="${line}" fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+    </svg>`;
+}
+
+// ─────────────────────────────────────────────
+//  Exercise Progress View
+// ─────────────────────────────────────────────
+async function renderExerciseProgress(name) {
+  const data = await api.getProgress(name);
+  const prHtml = data.pr
+    ? `<div class="pr-badge">🏆 Recorde: <strong>${data.pr.max_weight}kg</strong> em ${formatDate(data.pr.date)}</div>`
+    : `<div class="pr-badge" style="background:var(--border);color:var(--text-muted)">Ainda sem recorde registrado</div>`;
+
+  return `
+    <div class="page">
+      <div class="page-header">
+        <button class="btn btn-ghost btn-icon" data-action="back">←</button>
+        <h1>${esc(name)}</h1>
+      </div>
+      <div class="page-content">
+        ${prHtml}
+        <div class="section-title">Evolução de Carga</div>
+        <div class="card card-body" style="padding:16px 8px">
+          ${renderLineChart(data.history)}
+        </div>
+        <div class="section-title" style="margin-top:20px">Histórico</div>
+        <div class="card">
+          ${data.history.length === 0 ? '<p class="text-muted text-sm" style="padding:16px">Nenhum dado ainda.</p>' :
+            [...data.history].reverse().map(h => `
+              <div class="card-row" style="cursor:default">
+                <span style="font-size:13px;color:var(--text-muted)">${formatDate(h.date)}</span>
+                <span style="margin-left:auto;font-weight:700">${h.max_weight}kg × ${h.max_reps ?? '—'} reps</span>
+              </div>`).join('')}
+        </div>
+      </div>
+      ${navHtml('history')}
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
+//  Partner View
+// ─────────────────────────────────────────────
+async function renderPartner() {
+  const workouts = await api.getPartnerWorkouts();
+
+  const list = workouts.length === 0 ? `
+    <div class="empty-state">
+      <div class="empty-icon">👫</div>
+      <div class="empty-title">Nenhum treino ainda</div>
+      <p class="empty-text">Assim que seu parceiro treinar, aparece aqui! 💕</p>
+    </div>` :
+    workouts.map(w => {
+      const d = new Date(w.completed_at);
+      return `
+        <div class="history-item" style="cursor:pointer" data-action="view-partner-workout" data-id="${w.id}">
+          <div class="history-date-badge">
+            <div class="history-date-day">${d.getDate()}</div>
+            <div class="history-date-month">${d.toLocaleString('pt-BR',{month:'short'})}</div>
+          </div>
+          <div class="history-info">
+            <div class="history-name">${esc(w.user_name)} — ${esc(w.template_name)}</div>
+            <div class="history-meta">${w.exercise_count} exercícios · ${w.total_sets} séries</div>
+            ${w.brio ? `<span class="badge ${w.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}" style="margin-top:4px;display:inline-block">${w.brio === 'com_brio' ? '🔥 Com Brio' : '💕 Sem Brio'}</span>` : ''}
+          </div>
+          <span style="color:var(--text-light);font-size:16px">›</span>
+        </div>`;
+    }).join('');
+
+  return `
+    <div class="page">
+      <div class="page-header">
+        <h1>👫 Parceiro</h1>
+      </div>
+      <div class="page-content">
+        <div class="section-title">Treinos do Parceiro</div>
+        <div class="card">${list}</div>
+      </div>
+      ${navHtml('partner')}
+    </div>`;
+}
+
+async function renderPartnerWorkoutDetail(id) {
+  const workout = await api.getPartnerWorkout(id);
+
+  const exercisesHtml = workout.exercises.map(ex => `
+    <div class="workout-exercise-block">
+      <div class="workout-exercise-title">${esc(ex.exercise_name)}</div>
+      ${ex.sets.map(s => `
+        <div class="set-summary-row" style="cursor:default">
+          <span class="set-num">Série ${s.set_number}</span>
+          <span><strong>${s.weight ?? '—'}</strong> kg</span>
+          ${s.reps_left != null
+            ? `<span>· Esq <strong>${s.reps_left}</strong> / Dir <strong>${s.reps_right ?? '—'}</strong></span>`
+            : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
+        </div>`).join('')}
+    </div>`).join('');
+
+  return `
+    <div class="page">
+      <div class="page-header">
+        <button class="btn btn-ghost btn-icon" data-action="back">←</button>
+        <h1>${esc(workout.user_name)} 💕</h1>
+      </div>
+      <div class="page-content">
+        <div class="flex gap-2 items-center" style="margin-bottom:16px;flex-wrap:wrap">
+          <span class="badge badge-gray">📅 ${formatDate(workout.completed_at)}</span>
+          <span class="badge badge-primary">${esc(workout.template_name)}</span>
+          ${workout.brio ? `<span class="badge ${workout.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}">${workout.brio === 'com_brio' ? '🔥 Com Brio' : '💕 Sem Brio'}</span>` : ''}
+        </div>
+        ${workout.notes ? `<div class="alert alert-info">${esc(workout.notes)}</div>` : ''}
+        <div class="card card-body">
+          ${exercisesHtml || '<p class="text-muted">Nenhum exercício registrado.</p>'}
+        </div>
+      </div>
+      ${navHtml('partner')}
+    </div>`;
+}
+
 async function renderHistory() {
   const workouts = await api.getWorkouts();
 
@@ -780,7 +944,7 @@ async function renderWorkoutDetail(id) {
 
   const exercisesHtml = workout.exercises.map(ex => `
     <div class="workout-exercise-block">
-      <div class="workout-exercise-title">${esc(ex.exercise_name)}</div>
+      <div class="workout-exercise-title" style="cursor:pointer" data-action="view-exercise-progress" data-name="${esc(ex.exercise_name)}">${esc(ex.exercise_name)} <span style="font-size:11px;color:var(--text-light)">📈</span></div>
       ${ex.sets.map(s => `
         <div class="set-summary-row" style="cursor:pointer"
           data-action="edit-log"
@@ -790,6 +954,7 @@ async function renderWorkoutDetail(id) {
           data-reps="${s.reps ?? ''}"
           data-reps-left="${s.reps_left ?? ''}"
           data-reps-right="${s.reps_right ?? ''}"
+          data-rir="${s.rir ?? ''}"
           data-is-unilateral="${s.reps_left != null ? '1' : '0'}"
           title="Toque para editar">
           <span class="set-num">Série ${s.set_number}</span>
@@ -797,6 +962,7 @@ async function renderWorkoutDetail(id) {
           ${s.reps_left != null
             ? `<span>· Esq <strong>${s.reps_left}</strong> / Dir <strong>${s.reps_right ?? '—'}</strong> reps</span>`
             : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
+          ${s.rir != null ? `<span style="color:var(--text-muted);font-size:12px">RIR ${s.rir}</span>` : ''}
           <span style="margin-left:auto;color:var(--text-light);font-size:13px;">✏️</span>
         </div>`).join('')}
     </div>`).join('');
@@ -912,6 +1078,8 @@ async function handleClick(e) {
       'template-detail': 'templates',
       'workout-detail': 'history',
       'workout': 'dashboard',
+      'partner-detail': 'partner',
+      'exercise-progress': 'history',
     };
     navigate(backMap[state.view] || 'dashboard');
     return;
@@ -1021,15 +1189,17 @@ async function handleClick(e) {
         const setNum = i + 1;
         const weight = parseFloat(document.getElementById(`w-${cssId(exercise.name)}-${setNum}`)?.value);
         if (!weight) return; // skip empty rows
+        const rirVal = document.getElementById(`rir-${cssId(exercise.name)}-${setNum}`)?.value;
+        const rir = rirVal !== '' && rirVal != null ? parseInt(rirVal) : null;
         if (exercise.is_unilateral) {
           const repsLeft = parseInt(document.getElementById(`rl-${cssId(exercise.name)}-${setNum}`)?.value);
           const repsRight = parseInt(document.getElementById(`rr-${cssId(exercise.name)}-${setNum}`)?.value);
           if (repsLeft || repsRight) {
-            logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps_left: repsLeft || null, reps_right: repsRight || null });
+            logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps_left: repsLeft || null, reps_right: repsRight || null, rir });
           }
         } else {
           const reps = parseInt(document.getElementById(`r-${cssId(exercise.name)}-${setNum}`)?.value);
-          if (reps) logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps });
+          if (reps) logsToSave.push({ exercise_name: exercise.name, set_number: setNum, weight, reps, rir });
         }
       });
     }
@@ -1045,7 +1215,11 @@ async function handleClick(e) {
       for (const log of logsToSave) {
         await api.addLog(state.activeWorkout.id, log);
       }
-      await api.completeWorkout(state.activeWorkout.id, notes, state.activeBrio);
+      const completed = await api.completeWorkout(state.activeWorkout.id, notes, state.activeBrio);
+      if (completed.prs && completed.prs.length > 0) {
+        const prNames = completed.prs.map(p => `🏆 ${p.exercise_name}: ${p.new_max}kg`).join('\n');
+        showToast('Novo recorde!\n' + prNames, 'success');
+      }
       const finishMsgs = MSGS[getProfile()].finish;
       const finishMsg = finishMsgs[Math.floor(Math.random() * finishMsgs.length)];
       state.activeWorkout = null;
@@ -1084,6 +1258,16 @@ async function handleClick(e) {
     return;
   }
 
+  if (action === 'view-partner-workout') {
+    navigate('partner-detail', { id: btn.dataset.id });
+    return;
+  }
+
+  if (action === 'view-exercise-progress') {
+    navigate('exercise-progress', { name: btn.dataset.name });
+    return;
+  }
+
   if (action === 'delete-workout') {
     if (!confirm('Apagar este treino?')) return;
     try {
@@ -1097,8 +1281,8 @@ async function handleClick(e) {
   }
 
   if (action === 'edit-log') {
-    const { workoutId, logId, weight, reps, repsLeft, repsRight, isUnilateral } = btn.dataset;
-    showEditLogModal(workoutId, logId, { weight, reps, reps_left: repsLeft, reps_right: repsRight, is_unilateral: isUnilateral === '1' });
+    const { workoutId, logId, weight, reps, repsLeft, repsRight, rir, isUnilateral } = btn.dataset;
+    showEditLogModal(workoutId, logId, { weight, reps, reps_left: repsLeft, reps_right: repsRight, rir, is_unilateral: isUnilateral === '1' });
     return;
   }
 }
@@ -1165,6 +1349,11 @@ function showEditLogModal(workoutId, logId, current) {
         <input class="form-input" name="reps" type="number" min="0"
           value="${current.reps}" placeholder="reps" required />
       </div>`}
+      <div class="form-group">
+        <label class="form-label">RIR (Reps In Reserve)</label>
+        <input class="form-input" name="rir" type="number" min="0" max="10"
+          value="${current.rir ?? ''}" placeholder="0–10 (opcional)" />
+      </div>
       <div style="display:flex;gap:10px;margin-top:8px">
         <button type="submit" class="btn btn-primary" style="flex:1">Salvar</button>
         <button type="button" class="btn btn-danger btn-sm" id="delete-log-btn">Apagar</button>
@@ -1176,11 +1365,13 @@ function showEditLogModal(workoutId, logId, current) {
     const saveBtn = e.target.querySelector('button[type=submit]');
     saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
     try {
+      const rirInput = e.target.rir?.value;
       const data = {
         weight: parseFloat(e.target.weight?.value) || null,
         reps: parseInt(e.target.reps?.value) || null,
         reps_left: parseInt(e.target.reps_left?.value) || null,
         reps_right: parseInt(e.target.reps_right?.value) || null,
+        rir: rirInput !== '' && rirInput != null ? parseInt(rirInput) : null,
       };
       await api.updateLog(workoutId, logId, data);
       overlay.remove();

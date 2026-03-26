@@ -55,6 +55,9 @@ ALTER TABLE template_exercises ADD COLUMN IF NOT EXISTS is_unilateral BOOLEAN DE
 ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS reps_left INTEGER;
 ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS reps_right INTEGER;
 
+-- RIR (Reps In Reserve) — percepção de esforço
+ALTER TABLE exercise_logs ADD COLUMN IF NOT EXISTS rir SMALLINT;
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_workout_templates_user ON workout_templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_template_exercises_template ON template_exercises(template_id);

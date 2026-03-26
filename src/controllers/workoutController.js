@@ -129,6 +129,7 @@ async function get(req, res) {
         reps: log.reps,
         reps_left: log.reps_left,
         reps_right: log.reps_right,
+        rir: log.rir,
         notes: log.notes,
       });
     }
@@ -150,7 +151,29 @@ async function complete(req, res) {
       [notes || null, brio || null, req.params.id, req.user.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Workout not found or already completed' });
-    res.json(result.rows[0]);
+
+    // Detect PRs — exercises where today's max weight beats all previous workouts
+    const prs = await db.query(
+      `WITH today AS (
+        SELECT exercise_name, MAX(weight) AS max_weight
+        FROM exercise_logs WHERE workout_id = $1 AND weight IS NOT NULL
+        GROUP BY exercise_name
+      ),
+      previous AS (
+        SELECT el.exercise_name, MAX(el.weight) AS max_weight
+        FROM exercise_logs el
+        JOIN workouts w ON el.workout_id = w.id
+        WHERE w.user_id = $2 AND w.id != $1 AND w.completed_at IS NOT NULL AND el.weight IS NOT NULL
+        GROUP BY el.exercise_name
+      )
+      SELECT t.exercise_name, t.max_weight AS new_max, COALESCE(p.max_weight, 0) AS prev_max
+      FROM today t
+      LEFT JOIN previous p ON t.exercise_name = p.exercise_name
+      WHERE t.max_weight > COALESCE(p.max_weight, 0)`,
+      [req.params.id, req.user.id]
+    );
+
+    res.json({ ...result.rows[0], prs: prs.rows });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to complete workout' });
@@ -172,7 +195,7 @@ async function remove(req, res) {
 }
 
 async function addLog(req, res) {
-  const { exercise_name, set_number, weight, reps, reps_left, reps_right, notes } = req.body;
+  const { exercise_name, set_number, weight, reps, reps_left, reps_right, rir, notes } = req.body;
 
   if (!exercise_name || !set_number) {
     return res.status(400).json({ error: 'exercise_name and set_number are required' });
@@ -186,19 +209,19 @@ async function addLog(req, res) {
     if (!workout.rows[0]) return res.status(404).json({ error: 'Active workout not found' });
 
     const result = await db.query(
-      `INSERT INTO exercise_logs (workout_id, exercise_name, set_number, weight, reps, reps_left, reps_right, notes)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+      `INSERT INTO exercise_logs (workout_id, exercise_name, set_number, weight, reps, reps_left, reps_right, rir, notes)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        ON CONFLICT DO NOTHING
        RETURNING *`,
-      [req.params.id, exercise_name, set_number, weight || null, reps || null, reps_left || null, reps_right || null, notes || null]
+      [req.params.id, exercise_name, set_number, weight || null, reps || null, reps_left || null, reps_right || null, rir ?? null, notes || null]
     );
 
     if (!result.rows[0]) {
       const updated = await db.query(
-        `UPDATE exercise_logs SET weight = $1, reps = $2, reps_left = $3, reps_right = $4, notes = $5
-         WHERE workout_id = $6 AND exercise_name = $7 AND set_number = $8
+        `UPDATE exercise_logs SET weight = $1, reps = $2, reps_left = $3, reps_right = $4, rir = $5, notes = $6
+         WHERE workout_id = $7 AND exercise_name = $8 AND set_number = $9
          RETURNING *`,
-        [weight || null, reps || null, reps_left || null, reps_right || null, notes || null, req.params.id, exercise_name, set_number]
+        [weight || null, reps || null, reps_left || null, reps_right || null, rir ?? null, notes || null, req.params.id, exercise_name, set_number]
       );
       return res.json(updated.rows[0]);
     }
@@ -211,15 +234,15 @@ async function addLog(req, res) {
 }
 
 async function updateLog(req, res) {
-  const { weight, reps, reps_left, reps_right, notes } = req.body;
+  const { weight, reps, reps_left, reps_right, rir, notes } = req.body;
   try {
     const result = await db.query(
       `UPDATE exercise_logs el
-       SET weight = $1, reps = $2, reps_left = $3, reps_right = $4, notes = $5
+       SET weight = $1, reps = $2, reps_left = $3, reps_right = $4, rir = $5, notes = $6
        FROM workouts w
-       WHERE el.id = $6 AND el.workout_id = w.id AND w.user_id = $7 AND w.id = $8
+       WHERE el.id = $7 AND el.workout_id = w.id AND w.user_id = $8 AND w.id = $9
        RETURNING el.*`,
-      [weight ?? null, reps ?? null, reps_left ?? null, reps_right ?? null, notes ?? null,
+      [weight ?? null, reps ?? null, reps_left ?? null, reps_right ?? null, rir ?? null, notes ?? null,
        req.params.logId, req.user.id, req.params.id]
     );
     if (!result.rows[0]) return res.status(404).json({ error: 'Log not found' });
@@ -247,4 +270,83 @@ async function deleteLog(req, res) {
   }
 }
 
-module.exports = { start, getActive, list, get, complete, remove, addLog, updateLog, deleteLog };
+async function getPartner(req, res) {
+  try {
+    const result = await db.query(
+      `SELECT w.id, w.template_name, w.completed_at, w.brio, w.notes,
+              u.name AS user_name,
+              COUNT(DISTINCT el.exercise_name)::int AS exercise_count,
+              COUNT(el.id)::int AS total_sets
+       FROM workouts w
+       JOIN users u ON w.user_id = u.id
+       LEFT JOIN exercise_logs el ON el.workout_id = w.id
+       WHERE w.user_id != $1 AND w.completed_at IS NOT NULL
+       GROUP BY w.id, u.name
+       ORDER BY w.completed_at DESC
+       LIMIT 20`,
+      [req.user.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch partner workouts' });
+  }
+}
+
+async function getPartnerWorkout(req, res) {
+  try {
+    const workout = await db.query(
+      `SELECT w.*, u.name AS user_name FROM workouts w
+       JOIN users u ON w.user_id = u.id
+       WHERE w.id = $1 AND w.user_id != $2 AND w.completed_at IS NOT NULL`,
+      [req.params.id, req.user.id]
+    );
+    if (!workout.rows[0]) return res.status(404).json({ error: 'Workout not found' });
+
+    const logs = await db.query(
+      'SELECT * FROM exercise_logs WHERE workout_id = $1 ORDER BY exercise_name, set_number',
+      [req.params.id]
+    );
+
+    const exerciseMap = {};
+    for (const log of logs.rows) {
+      if (!exerciseMap[log.exercise_name]) {
+        exerciseMap[log.exercise_name] = { exercise_name: log.exercise_name, sets: [] };
+      }
+      exerciseMap[log.exercise_name].sets.push({
+        id: log.id, set_number: log.set_number, weight: log.weight,
+        reps: log.reps, reps_left: log.reps_left, reps_right: log.reps_right,
+      });
+    }
+    res.json({ ...workout.rows[0], exercises: Object.values(exerciseMap) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch partner workout' });
+  }
+}
+
+async function getProgress(req, res) {
+  try {
+    const name = decodeURIComponent(req.params.name);
+    const history = await db.query(
+      `SELECT w.completed_at::date AS date, MAX(el.weight) AS max_weight, MAX(el.reps) AS max_reps
+       FROM exercise_logs el
+       JOIN workouts w ON el.workout_id = w.id
+       WHERE w.user_id = $1 AND el.exercise_name = $2
+         AND w.completed_at IS NOT NULL AND el.weight IS NOT NULL
+       GROUP BY w.completed_at::date
+       ORDER BY date ASC
+       LIMIT 30`,
+      [req.user.id, name]
+    );
+    const pr = history.rows.reduce((best, r) =>
+      parseFloat(r.max_weight) > parseFloat(best?.max_weight || 0) ? r : best, null
+    );
+    res.json({ exercise: name, history: history.rows, pr });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch progress' });
+  }
+}
+
+module.exports = { start, getActive, list, get, complete, remove, addLog, updateLog, deleteLog, getPartner, getPartnerWorkout, getProgress };
