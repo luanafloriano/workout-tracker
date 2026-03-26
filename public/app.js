@@ -977,13 +977,7 @@ async function renderFeed() {
       const isOwn = Number(p.user_id) === Number(state.user.id);
       const photoHtml = p.photo_url
         ? `<img src="${p.photo_url}" style="width:100%;display:block" />`
-        : isOwn
-          ? `<label class="feed-add-photo-btn">
-               📸 Adicionar foto
-               <input type="file" accept="image/*" capture="environment" style="display:none"
-                 data-action="upload-photo" data-id="${p.id}" />
-             </label>`
-          : '';
+        : '';
       return `
         <div class="feed-card" data-workout-id="${p.id}">
           <div class="feed-card-header">
