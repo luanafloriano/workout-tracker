@@ -356,15 +356,12 @@ async function getFeed(req, res) {
     const result = await db.query(
       `SELECT w.id, w.template_name, w.completed_at, w.brio, w.photo_url,
               u.id AS user_id, u.name AS user_name,
-              COUNT(DISTINCT wl.id)::int AS like_count,
-              COUNT(DISTINCT wc.id)::int AS comment_count,
-              bool_or(wl.user_id = $1) AS liked_by_me
+              (SELECT COUNT(*)::int FROM workout_likes WHERE workout_id = w.id) AS like_count,
+              (SELECT COUNT(*)::int FROM workout_comments WHERE workout_id = w.id) AS comment_count,
+              EXISTS(SELECT 1 FROM workout_likes WHERE workout_id = w.id AND user_id = $1) AS liked_by_me
        FROM workouts w
        JOIN users u ON w.user_id = u.id
-       LEFT JOIN workout_likes wl ON wl.workout_id = w.id
-       LEFT JOIN workout_comments wc ON wc.workout_id = w.id
        WHERE w.completed_at IS NOT NULL
-       GROUP BY w.id, u.id
        ORDER BY w.completed_at DESC
        LIMIT 50`,
       [req.user.id]

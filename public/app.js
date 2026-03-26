@@ -10,6 +10,7 @@ const state = {
   activeExercises: [],
   loggedSets: {},
   activeBrio: null,
+  pendingPhoto: null,
   workoutMsgCount: 0,
   workoutSetCount: 0,
   greetingShown: false,
@@ -210,6 +211,7 @@ function render() {
     workout: () => renderActiveWorkout(),
     history: renderHistory,
     'workout-detail': () => renderWorkoutDetail(state.params.id),
+    'workout-readonly': () => renderWorkoutReadonly(state.params.id),
     feed: renderFeed,
     partner: renderPartner,
     'partner-detail': () => renderPartnerWorkoutDetail(state.params.id),
@@ -650,6 +652,11 @@ async function renderActiveWorkout() {
       </div>
       <div class="finish-bar">
         <button class="btn btn-ghost" style="flex:0 0 auto" data-action="discard-workout">Descartar</button>
+        <label class="btn btn-ghost btn-icon" title="Foto do treino" style="position:relative;overflow:hidden">
+          ${state.pendingPhoto ? '📸✓' : '📸'}
+          <input type="file" accept="image/*" capture="environment" style="position:absolute;opacity:0;inset:0;cursor:pointer"
+            data-action="pending-photo" />
+        </label>
         <button class="btn btn-success btn-lg" style="flex:1" data-action="finish-workout">Finalizar Treino</button>
       </div>
       ${navHtml('workout')}
@@ -913,6 +920,48 @@ async function renderPartnerWorkoutDetail(id) {
 }
 
 // ─────────────────────────────────────────────
+//  Workout Read-only View (from feed)
+// ─────────────────────────────────────────────
+async function renderWorkoutReadonly(id) {
+  const workout = await api.getWorkout(id).catch(() => api.getPartnerWorkout(id));
+
+  const exercisesHtml = workout.exercises.map(ex => `
+    <div class="workout-exercise-block">
+      <div class="workout-exercise-title">${esc(ex.exercise_name)}</div>
+      ${ex.sets.map(s => `
+        <div class="set-summary-row" style="cursor:default">
+          <span class="set-num">Série ${s.set_number}</span>
+          <span><strong>${s.weight ?? '—'}</strong> kg</span>
+          ${s.reps_left != null
+            ? `<span>· Esq <strong>${s.reps_left}</strong> / Dir <strong>${s.reps_right ?? '—'}</strong></span>`
+            : `<span>× <strong>${s.reps ?? '—'}</strong> reps</span>`}
+          ${s.rir != null ? `<span style="color:var(--text-muted);font-size:12px">RIR ${s.rir}</span>` : ''}
+        </div>`).join('')}
+    </div>`).join('');
+
+  return `
+    <div class="page">
+      <div class="page-header">
+        <button class="btn btn-ghost btn-icon" data-action="back">←</button>
+        <h1>${esc(workout.template_name ?? workout.user_name)}</h1>
+      </div>
+      <div class="page-content">
+        ${workout.photo_url ? `<img src="${workout.photo_url}" style="width:100%;border-radius:12px;margin-bottom:16px;display:block" />` : ''}
+        <div class="flex gap-2 items-center" style="margin-bottom:16px;flex-wrap:wrap">
+          <span class="badge badge-gray">📅 ${formatDate(workout.completed_at)}</span>
+          ${workout.user_name ? `<span class="badge badge-gray">👤 ${esc(workout.user_name)}</span>` : ''}
+          ${workout.brio ? `<span class="badge ${workout.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}">${workout.brio === 'com_brio' ? '🔥 Com Brio' : '💕 Sem Brio'}</span>` : ''}
+        </div>
+        ${workout.notes ? `<div class="alert alert-info">${esc(workout.notes)}</div>` : ''}
+        <div class="card card-body">
+          ${exercisesHtml || '<p class="text-muted">Nenhum exercício registrado.</p>'}
+        </div>
+      </div>
+      ${navHtml('feed')}
+    </div>`;
+}
+
+// ─────────────────────────────────────────────
 //  Feed View
 // ─────────────────────────────────────────────
 async function renderFeed() {
@@ -925,10 +974,9 @@ async function renderFeed() {
       <p class="empty-text">Finalize um treino para aparecer aqui!</p>
     </div>` :
     posts.map(p => {
-      const isOwn = p.user_id === state.user.id;
+      const isOwn = Number(p.user_id) === Number(state.user.id);
       const photoHtml = p.photo_url
-        ? `<img src="${p.photo_url}" style="width:100%;display:block;cursor:pointer"
-             data-action="${isOwn ? 'view-workout' : 'view-partner-workout'}" data-id="${p.id}" />`
+        ? `<img src="${p.photo_url}" style="width:100%;display:block" />`
         : isOwn
           ? `<label class="feed-add-photo-btn">
                📸 Adicionar foto
@@ -951,7 +999,7 @@ async function renderFeed() {
             <button class="feed-action-btn" data-action="open-comments" data-id="${p.id}">
               💬 <span>${p.comment_count}</span>
             </button>
-            <button class="feed-action-btn" style="margin-left:auto" data-action="${isOwn ? 'view-workout' : 'view-partner-workout'}" data-id="${p.id}">
+            <button class="feed-action-btn" style="margin-left:auto" data-action="view-workout-readonly" data-id="${p.id}">
               ver treino ›
             </button>
           </div>
@@ -1089,6 +1137,14 @@ function bindCurrentView() {
   _bound.add(document);
   document.addEventListener('click', handleClick);
   document.addEventListener('change', async (e) => {
+    const pending = e.target.closest('input[data-action="pending-photo"]');
+    if (pending && pending.files?.[0]) {
+      state.pendingPhoto = pending.files[0];
+      const label = pending.closest('label');
+      if (label) label.firstChild.textContent = '📸✓';
+      return;
+    }
+
     const input = e.target.closest('input[data-action="upload-photo"]');
     if (!input || !input.files?.[0]) return;
     const id = input.dataset.id;
@@ -1195,6 +1251,7 @@ async function handleClick(e) {
       'workout-detail': 'history',
       'workout': 'dashboard',
       'partner-detail': 'partner',
+      'workout-readonly': 'feed',
       'exercise-progress': 'history',
     };
     navigate(backMap[state.view] || 'dashboard');
@@ -1331,18 +1388,24 @@ async function handleClick(e) {
       for (const log of logsToSave) {
         await api.addLog(state.activeWorkout.id, log);
       }
-      const completed = await api.completeWorkout(state.activeWorkout.id, notes, state.activeBrio);
+      const completedId = state.activeWorkout.id;
+      const completed = await api.completeWorkout(completedId, notes, state.activeBrio);
       if (completed.prs && completed.prs.length > 0) {
         const prNames = completed.prs.map(p => `🏆 ${p.exercise_name}: ${p.new_max}kg`).join('\n');
         showToast('Novo recorde!\n' + prNames, 'success');
       }
+      const photoToUpload = state.pendingPhoto;
       const finishMsgs = MSGS[getProfile()].finish;
       const finishMsg = finishMsgs[Math.floor(Math.random() * finishMsgs.length)];
       state.activeWorkout = null;
       state.activeExercises = [];
       state.loggedSets = {};
       state.activeBrio = null;
+      state.pendingPhoto = null;
       document.body.classList.remove('mode-brio', 'mode-sem-brio');
+      if (photoToUpload) {
+        try { await api.uploadPhoto(completedId, photoToUpload); } catch (_) {}
+      }
       showCuteMessage(finishMsg);
       setTimeout(() => navigate('feed'), 2000);
     } catch (ex) {
@@ -1361,6 +1424,7 @@ async function handleClick(e) {
       state.activeExercises = [];
       state.loggedSets = {};
       state.activeBrio = null;
+      state.pendingPhoto = null;
       document.body.classList.remove('mode-brio', 'mode-sem-brio');
       navigate('dashboard');
     } catch (ex) {
@@ -1371,6 +1435,11 @@ async function handleClick(e) {
 
   if (action === 'view-workout') {
     navigate('workout-detail', { id: btn.dataset.id });
+    return;
+  }
+
+  if (action === 'view-workout-readonly') {
+    navigate('workout-readonly', { id: btn.dataset.id });
     return;
   }
 
