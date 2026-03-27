@@ -620,7 +620,11 @@ async function renderActiveWorkout() {
       </button>
     </div>`;
 
-  const exerciseCards = exercises.map(ex => renderExerciseCard(ex, workout.id)).join('');
+  const activeLogs = {};
+  for (const log of (active?.logs || [])) {
+    activeLogs[`${log.exercise_name}:${log.set_number}`] = log;
+  }
+  const exerciseCards = exercises.map(ex => renderExerciseCard(ex, workout.id, activeLogs)).join('');
 
   // Build last workout summary from last_sets data
   const lastWorkoutDate = exercises.find(ex => ex.last_sets?.length > 0)?.last_sets?.[0]?.workout_date;
@@ -663,7 +667,7 @@ async function renderActiveWorkout() {
     </div>`;
 }
 
-function renderExerciseCard(exercise, workoutId) {
+function renderExerciseCard(exercise, workoutId, activeLogs = {}) {
   const lastSets = exercise.last_sets || [];
   const numSets = exercise.default_sets || 3;
 
@@ -686,7 +690,7 @@ function renderExerciseCard(exercise, workoutId) {
 
   let setRows = '';
   for (let i = 1; i <= numSets; i++) {
-    setRows += renderSetRow(exercise, workoutId, i, lastSets);
+    setRows += renderSetRow(exercise, workoutId, i, lastSets, activeLogs[`${exercise.name}:${i}`]);
   }
 
   const prevSummary = lastSets.length > 0
@@ -722,7 +726,7 @@ function renderExerciseCard(exercise, workoutId) {
     </div>`;
 }
 
-function renderSetRow(exercise, workoutId, setNum, lastSets) {
+function renderSetRow(exercise, workoutId, setNum, lastSets, activeLog) {
   const last = lastSets.find(s => s.set_number === setNum);
   const isUni = exercise.is_unilateral;
 
@@ -731,24 +735,26 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
     ? (last ? `${last.weight}kg · ${last.reps_left ?? '—'}E/${last.reps_right ?? '—'}D` : '—')
     : (last ? `${last.weight}kg × ${last.reps}` : '—');
 
+  const savedClass = activeLog ? ' prefilled' : '';
+
   const repsCell = isUni ? `
       <td>
-        <input class="set-input" type="number" inputmode="numeric" min="0" placeholder="E" style="width:52px"
-          id="rl-${cssId(exercise.name)}-${setNum}" />
+        <input class="set-input${savedClass}" type="number" inputmode="numeric" min="0" placeholder="E" style="width:52px"
+          id="rl-${cssId(exercise.name)}-${setNum}" value="${activeLog?.reps_left ?? ''}" />
       </td>
       <td>
-        <input class="set-input" type="number" inputmode="numeric" min="0" placeholder="D" style="width:52px"
-          id="rr-${cssId(exercise.name)}-${setNum}" />
+        <input class="set-input${savedClass}" type="number" inputmode="numeric" min="0" placeholder="D" style="width:52px"
+          id="rr-${cssId(exercise.name)}-${setNum}" value="${activeLog?.reps_right ?? ''}" />
       </td>` : `
       <td>
-        <input class="set-input" type="number" inputmode="numeric" min="0" placeholder="—"
-          id="r-${cssId(exercise.name)}-${setNum}" />
+        <input class="set-input${savedClass}" type="number" inputmode="numeric" min="0" placeholder="—"
+          id="r-${cssId(exercise.name)}-${setNum}" value="${activeLog?.reps ?? ''}" />
       </td>`;
 
   const noteRowId = `note-row-${cssId(exercise.name)}-${setNum}`;
   const noteId = `note-${cssId(exercise.name)}-${setNum}`;
   return `
-    <tr class="set-row" id="set-row-${cssId(exercise.name)}-${setNum}">
+    <tr class="set-row${activeLog ? ' done-row' : ''}" id="set-row-${cssId(exercise.name)}-${setNum}">
       <td>
         <div style="display:flex;flex-direction:column;align-items:center;gap:2px">
           <span>${setNum}</span>
@@ -757,13 +763,13 @@ function renderSetRow(exercise, workoutId, setNum, lastSets) {
       </td>
       <td class="set-prev">${prevText}</td>
       <td>
-        <input class="set-input" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"
-          id="w-${cssId(exercise.name)}-${setNum}" />
+        <input class="set-input${savedClass}" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"
+          id="w-${cssId(exercise.name)}-${setNum}" value="${activeLog?.weight ?? ''}" />
       </td>
       ${repsCell}
       <td>
-        <input class="set-input" type="number" inputmode="numeric" min="0" max="10" placeholder="RIR" style="width:52px"
-          id="rir-${cssId(exercise.name)}-${setNum}" />
+        <input class="set-input${savedClass}" type="number" inputmode="numeric" min="0" max="10" placeholder="RIR" style="width:52px"
+          id="rir-${cssId(exercise.name)}-${setNum}" value="${activeLog?.rir ?? ''}" />
       </td>
     </tr>
     <tr class="set-note-row" id="${noteRowId}" style="display:none">
@@ -1097,6 +1103,14 @@ async function renderWorkoutDetail(id) {
           <span style="margin-left:auto;color:var(--text-light);font-size:13px;">✏️</span>
         </div>
         ${s.notes ? `<div class="set-note-display">📝 ${esc(s.notes)}</div>` : ''}`).join('')}
+      <button class="btn btn-ghost btn-sm" style="margin-top:6px;width:100%"
+        data-action="add-log-to-workout"
+        data-workout-id="${workout.id}"
+        data-exercise="${esc(ex.exercise_name)}"
+        data-next-set="${ex.sets.length + 1}"
+        data-is-unilateral="${ex.sets[0]?.reps_left != null ? '1' : '0'}">
+        + Adicionar série
+      </button>
     </div>`).join('');
 
   return `
@@ -1454,6 +1468,12 @@ async function handleClick(e) {
     return;
   }
 
+  if (action === 'add-log-to-workout') {
+    const { workoutId, exercise, nextSet, isUnilateral } = btn.dataset;
+    showAddLogToWorkoutModal(workoutId, exercise, parseInt(nextSet), isUnilateral === '1');
+    return;
+  }
+
   if (action === 'toggle-set-note') {
     const row = document.getElementById(btn.dataset.target);
     if (!row) return;
@@ -1705,6 +1725,63 @@ async function showCommentsModal(workoutId) {
       if (feedBtn) feedBtn.textContent = Math.max(0, parseInt(feedBtn.textContent || '1') - 1);
     } catch (ex) {
       showToast(ex.message, 'error');
+    }
+  });
+}
+
+function showAddLogToWorkoutModal(workoutId, exerciseName, setNum, isUnilateral) {
+  const overlay = showModal(`
+    <div class="modal-title">+ Série ${setNum} — ${esc(exerciseName)}</div>
+    <form id="add-log-form">
+      <div class="form-group">
+        <label class="form-label">Peso (kg)</label>
+        <input class="form-input" name="weight" type="number" step="0.5" min="0" placeholder="kg" required autofocus />
+      </div>
+      ${isUnilateral ? `
+      <div class="form-group">
+        <label class="form-label">Reps Esquerda</label>
+        <input class="form-input" name="reps_left" type="number" min="0" placeholder="reps" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Reps Direita</label>
+        <input class="form-input" name="reps_right" type="number" min="0" placeholder="reps" />
+      </div>` : `
+      <div class="form-group">
+        <label class="form-label">Reps</label>
+        <input class="form-input" name="reps" type="number" min="0" placeholder="reps" required />
+      </div>`}
+      <div class="form-group">
+        <label class="form-label">RIR (opcional)</label>
+        <input class="form-input" name="rir" type="number" min="0" max="10" placeholder="0–10" />
+      </div>
+      <div class="form-group">
+        <label class="form-label">Anotação (opcional)</label>
+        <textarea class="form-input" name="notes" placeholder="Ex: dei uma roubadinha..." rows="2"></textarea>
+      </div>
+      <button type="submit" class="btn btn-primary" style="width:100%">Salvar</button>
+    </form>`);
+
+  overlay.querySelector('#add-log-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const saveBtn = e.target.querySelector('button[type=submit]');
+    saveBtn.disabled = true; saveBtn.textContent = 'Salvando…';
+    const rirVal = e.target.rir?.value;
+    try {
+      await api.addLog(workoutId, {
+        exercise_name: exerciseName,
+        set_number: setNum,
+        weight: parseFloat(e.target.weight?.value) || null,
+        reps: parseInt(e.target.reps?.value) || null,
+        reps_left: parseInt(e.target.reps_left?.value) || null,
+        reps_right: parseInt(e.target.reps_right?.value) || null,
+        rir: rirVal !== '' && rirVal != null ? parseInt(rirVal) : null,
+        notes: e.target.notes?.value?.trim() || null,
+      });
+      overlay.remove();
+      navigate('workout-detail', { id: workoutId });
+    } catch (ex) {
+      showToast(ex.message, 'error');
+      saveBtn.disabled = false; saveBtn.textContent = 'Salvar';
     }
   });
 }

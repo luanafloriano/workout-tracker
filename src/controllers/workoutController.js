@@ -203,10 +203,10 @@ async function addLog(req, res) {
 
   try {
     const workout = await db.query(
-      'SELECT id FROM workouts WHERE id = $1 AND user_id = $2 AND completed_at IS NULL',
+      'SELECT id FROM workouts WHERE id = $1 AND user_id = $2',
       [req.params.id, req.user.id]
     );
-    if (!workout.rows[0]) return res.status(404).json({ error: 'Active workout not found' });
+    if (!workout.rows[0]) return res.status(404).json({ error: 'Workout not found' });
 
     const result = await db.query(
       `INSERT INTO exercise_logs (workout_id, exercise_name, set_number, weight, reps, reps_left, reps_right, rir, notes)

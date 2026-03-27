@@ -812,3 +812,9 @@ body {
   padding: 2px 0 4px 8px;
   font-style: italic;
 }
+
+.set-input.prefilled {
+  border-color: var(--success);
+  background: #f0fdf4;
+  color: var(--text);
+}
