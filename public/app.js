@@ -621,7 +621,7 @@ async function renderActiveWorkout() {
     </div>`;
 
   const activeLogs = {};
-  for (const log of (active?.logs || [])) {
+  for (const log of (state.activeWorkout?.logs || [])) {
     activeLogs[`${log.exercise_name}:${log.set_number}`] = log;
   }
   const exerciseCards = exercises.map(ex => renderExerciseCard(ex, workout.id, activeLogs)).join('');
@@ -1079,7 +1079,25 @@ async function renderWorkoutDetail(id) {
 
   const duration = formatDuration(workout.started_at, workout.completed_at);
 
-  const exercisesHtml = workout.exercises.map(ex => `
+  // Build full exercise list: template exercises + any extra logged ones
+  const loggedMap = {};
+  for (const ex of workout.exercises) loggedMap[ex.exercise_name] = ex;
+
+  let allExercises = workout.exercises;
+  if (workout.template_id) {
+    try {
+      const tmpl = await api.getTemplate(workout.template_id);
+      const tmplNames = tmpl.exercises.map(e => e.name);
+      // Template exercises first, then any logged ones not in template
+      const extra = workout.exercises.filter(e => !tmplNames.includes(e.exercise_name));
+      allExercises = [
+        ...tmpl.exercises.map(e => loggedMap[e.name] || { exercise_name: e.name, sets: [] }),
+        ...extra,
+      ];
+    } catch (_) {}
+  }
+
+  const exercisesHtml = allExercises.map(ex => `
     <div class="workout-exercise-block">
       <div class="workout-exercise-title" style="cursor:pointer" data-action="view-exercise-progress" data-name="${esc(ex.exercise_name)}">${esc(ex.exercise_name)} <span style="font-size:11px;color:var(--text-light)">📈</span></div>
       ${ex.sets.map(s => `
