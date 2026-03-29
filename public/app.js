@@ -707,12 +707,14 @@ function renderExerciseCard(exercise, workoutId, activeLogs = {}) {
           <div class="exercise-prev">${prevSummary}</div>
         </div>
       </div>
+      <div style="overflow-x:auto">
       <table class="sets-table">
         <thead>${headerRow}</thead>
         <tbody id="sets-${cssId(exercise.name)}">
           ${setRows}
         </tbody>
       </table>
+      </div>
       <table style="width:100%"><tbody>
         <tr class="add-set-row">
           <td>
@@ -1007,6 +1009,7 @@ async function renderFeed() {
             ${p.brio ? `<span class="badge ${p.brio === 'com_brio' ? 'badge-brio' : 'badge-sem-brio'}" style="margin-left:auto">${p.brio === 'com_brio' ? '🔥' : '💕'}</span>` : ''}
           </div>
           ${photoHtml}
+          ${p.notes ? `<div class="feed-card-notes">${esc(p.notes)}</div>` : ''}
           <div class="feed-card-actions">
             <button class="feed-action-btn ${p.liked_by_me ? 'liked' : ''}" data-action="toggle-like" data-id="${p.id}">
               ${p.liked_by_me ? '❤️' : '🤍'} <span class="like-count">${p.like_count}</span>

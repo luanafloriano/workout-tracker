@@ -695,6 +695,14 @@ body {
   color: var(--text-muted);
 }
 
+.feed-card-notes {
+  padding: 8px 16px;
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-style: italic;
+  white-space: pre-wrap;
+}
+
 .feed-card-actions {
   display: flex;
   gap: 16px;

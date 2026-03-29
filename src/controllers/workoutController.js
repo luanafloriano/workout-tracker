@@ -112,7 +112,7 @@ async function get(req, res) {
     if (!workout.rows[0]) return res.status(404).json({ error: 'Workout not found' });
 
     const logs = await db.query(
-      'SELECT * FROM exercise_logs WHERE workout_id = $1 ORDER BY exercise_name, set_number',
+      'SELECT * FROM exercise_logs WHERE workout_id = $1 ORDER BY logged_at ASC, set_number ASC',
       [req.params.id]
     );
 
@@ -304,7 +304,7 @@ async function getPartnerWorkout(req, res) {
     if (!workout.rows[0]) return res.status(404).json({ error: 'Workout not found' });
 
     const logs = await db.query(
-      'SELECT * FROM exercise_logs WHERE workout_id = $1 ORDER BY exercise_name, set_number',
+      'SELECT * FROM exercise_logs WHERE workout_id = $1 ORDER BY logged_at ASC, set_number ASC',
       [req.params.id]
     );
 
@@ -354,7 +354,7 @@ async function getProgress(req, res) {
 async function getFeed(req, res) {
   try {
     const result = await db.query(
-      `SELECT w.id, w.template_name, w.completed_at, w.brio, w.photo_url,
+      `SELECT w.id, w.template_name, w.completed_at, w.brio, w.photo_url, w.notes,
               u.id AS user_id, u.name AS user_name,
               (SELECT COUNT(*)::int FROM workout_likes WHERE workout_id = w.id) AS like_count,
               (SELECT COUNT(*)::int FROM workout_comments WHERE workout_id = w.id) AS comment_count,
