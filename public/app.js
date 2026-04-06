@@ -19,59 +19,26 @@ const state = {
 // ─────────────────────────────────────────────
 //  Messages
 // ─────────────────────────────────────────────
-function getProfile() {
-  const name = (state.user?.name || '').toLowerCase();
-  if (name.includes('gabriel')) return 'gabriel';
-  if (name.includes('luana')) return 'luana';
-  return 'default';
-}
-
 const MSGS = {
-  luana: {
-    greet: [
-      { icon: '🌸💪', text: 'Bora brio, coração!\nHoje você vai arrasar!' },
-      { icon: '✨🏋️‍♀️', text: 'A Luana mais dedicada do pedaço chegou! 💕' },
-      { icon: '💕🔥', text: 'O Gabriel vai morrer de orgulho de você hoje 😍' },
-      { icon: '🌺💪', text: 'Bora, meu bem!\nEsse treino não sabe o que tá vindo 🌸' },
-      { icon: '🦋✨', text: 'Hoje é dia de superar a Luana de ontem 💕🔥' },
-    ],
-    during: [
-      { icon: '🌸🔥', text: 'Isso aí, coração!\nTá mandando demais 💪' },
-      { icon: '😤💕', text: 'Uiii que poderosa!\nContinua assim, meu bem 🌸' },
-      { icon: '💪✨', text: 'Ei, olha o tanto que você evoluiu!\nOrgulho 🥹💕' },
-      { icon: '🔥💕', text: 'Mais uma série!\nBora brio, coração! 💪' },
-      { icon: '🌺😤', text: 'Ninguém para essa mulher! 🔥\nBora filho do brio!' },
-    ],
-    finish: [
-      { icon: '🎉💕', text: 'Treino concluído!\nVocê é incrível, coração 💪🌸' },
-      { icon: '🏆✨', text: 'ISSO! A Luana arrasou hoje!\nGabriel com sorte 😍💕' },
-    ],
-  },
-  gabriel: {
-    greet: [
-      { icon: '🔥💥', text: 'BORA FILHO DO BRIO, GABRIEL!\nHoje é dia de guerra 💪' },
-      { icon: '⚡🦾', text: 'Acorda, campeão!\nO treino não vai se fazer sozinho 🔥' },
-      { icon: '💪🔥', text: 'Bora brio, Gab!\nA Luana tá na sua torcida 💕🔥' },
-      { icon: '🦾⚡', text: 'GABRIEL EM MODO BRIO TOTAL 🔥\nVAMOS!' },
-      { icon: '😤💥', text: 'Hoje tem treino, monstro!\nBORA FILHO DO BRIO 🔥' },
-    ],
-    during: [
-      { icon: '🔥💥', text: 'ISSO AÍ, FILHO DO BRIO! 💪\nNão para agora!' },
-      { icon: '🦾⚡', text: 'Mais uma série!\nVocê é um monstro 🔥' },
-      { icon: '💕🔥', text: 'A Luana tá orgulhosa de você 💕\nBORA!' },
-      { icon: '😤🔥', text: 'BORA BRIO!\nOlha a força desse homem 🦾⚡' },
-      { icon: '💥🏆', text: 'Quase lá!\nFilho do brio não desiste 🔥💥' },
-    ],
-    finish: [
-      { icon: '🏆🔥', text: 'TREINO DESTRUÍDO!\nFilho do brio demais 💪🔥' },
-      { icon: '💥🦾', text: 'ISSO AÍ GABRIEL!\nA Luana vai surtar de orgulho 😍💕' },
-    ],
-  },
-  default: {
-    greet: [{ icon: '💪🔥', text: 'Bora brio!\nHoje é dia de treino 🔥' }],
-    during: [{ icon: '🔥💪', text: 'Continua assim!\nBora brio 💪' }],
-    finish: [{ icon: '🎉💪', text: 'Treino concluído!\nArrasou 🔥' }],
-  },
+  greet: [
+    { icon: '💪🔥', text: 'Bora brio!\nHoje é dia de treino 🔥' },
+    { icon: '⚡🦾', text: 'Acorda, campeão!\nO treino não vai se fazer sozinho 🔥' },
+    { icon: '🔥💥', text: 'Hoje é dia de guerra 💪\nBORA!' },
+    { icon: '😤💥', text: 'Hoje tem treino, monstro!\nBORA FILHO DO BRIO 🔥' },
+    { icon: '🦾⚡', text: 'MODO BRIO TOTAL 🔥\nVAMOS!' },
+  ],
+  during: [
+    { icon: '🔥💥', text: 'ISSO AÍ! 💪\nNão para agora!' },
+    { icon: '🦾⚡', text: 'Mais uma série!\nVocê é um monstro 🔥' },
+    { icon: '😤🔥', text: 'BORA BRIO!\nOlha essa força 🦾⚡' },
+    { icon: '💥🏆', text: 'Quase lá!\nFilho do brio não desiste 🔥💥' },
+    { icon: '💪✨', text: 'Olha o tanto que você evoluiu!\nOrgulho 🥹🔥' },
+  ],
+  finish: [
+    { icon: '🏆🔥', text: 'TREINO DESTRUÍDO!\nArrasou demais 💪🔥' },
+    { icon: '🎉💪', text: 'Treino concluído!\nVocê é incrível 🔥' },
+    { icon: '💥🦾', text: 'ISSO AÍ!\nFilho do brio demais 🔥' },
+  ],
 };
 
 function showCuteMessage(msg) {
@@ -94,15 +61,18 @@ function showCuteMessage(msg) {
 function maybeShowGreeting() {
   if (state.greetingShown) return;
   state.greetingShown = true;
-  const msgs = MSGS[getProfile()].greet;
-  setTimeout(() => showCuteMessage(msgs[Math.floor(Math.random() * msgs.length)]), 700);
+  setTimeout(() => showCuteMessage(MSGS.greet[Math.floor(Math.random() * MSGS.greet.length)]), 700);
 }
 
 function maybeShowWorkoutMessage() {
   if (state.workoutMsgCount >= 2) return;
-  const msgs = MSGS[getProfile()].during;
-  showCuteMessage(msgs[Math.floor(Math.random() * msgs.length)]);
+  showCuteMessage(MSGS.during[Math.floor(Math.random() * MSGS.during.length)]);
   state.workoutMsgCount++;
+}
+
+function parseWeight(val) {
+  if (val == null || val === '') return NaN;
+  return parseFloat(String(val).replace(',', '.'));
 }
 
 function setAuth(user, token) {
@@ -190,7 +160,32 @@ const api = {
 // ─────────────────────────────────────────────
 //  Router
 // ─────────────────────────────────────────────
+function saveWorkoutDraft() {
+  if (!state.activeWorkout) return;
+  const inputs = {};
+  document.querySelectorAll('[id^="w-"],[id^="r-"],[id^="rl-"],[id^="rr-"],[id^="rir-"],[id^="note-"]').forEach(el => {
+    if (el.value) inputs[el.id] = el.value;
+  });
+  localStorage.setItem('workoutDraft', JSON.stringify({ workoutId: state.activeWorkout.id, inputs }));
+}
+
+function restoreWorkoutDraft() {
+  try {
+    const draft = JSON.parse(localStorage.getItem('workoutDraft') || 'null');
+    if (!draft || draft.workoutId !== state.activeWorkout?.id) return;
+    for (const [id, value] of Object.entries(draft.inputs)) {
+      const el = document.getElementById(id);
+      if (el && !el.disabled) el.value = value;
+    }
+  } catch (_) {}
+}
+
+function clearWorkoutDraft() {
+  localStorage.removeItem('workoutDraft');
+}
+
 function navigate(view, params = {}) {
+  if (state.view === 'workout') saveWorkoutDraft();
   state.view = view;
   state.params = params;
   render();
@@ -222,6 +217,7 @@ function render() {
     app.innerHTML = html;
     bindNav();
     bindCurrentView();
+    if (state.view === 'workout') restoreWorkoutDraft();
   }).catch(err => {
     app.innerHTML = renderError(err.message);
   });
@@ -458,7 +454,7 @@ async function renderDashboard() {
         </div>`;
     }).join('');
 
-  const heroChar = getProfile() === 'gabriel' ? '🏋️‍♂️🔥' : getProfile() === 'luana' ? '🏋️‍♀️💕' : '🏋️💪';
+  const heroChar = '🏋️💪';
 
   return `
     <div class="page">
@@ -765,7 +761,7 @@ function renderSetRow(exercise, workoutId, setNum, lastSets, activeLog) {
       </td>
       <td class="set-prev">${prevText}</td>
       <td>
-        <input class="set-input${savedClass}" type="number" inputmode="decimal" step="0.5" min="0" placeholder="—"
+        <input class="set-input${savedClass}" type="text" inputmode="decimal" placeholder="—"
           id="w-${cssId(exercise.name)}-${setNum}" value="${activeLog?.weight ?? ''}" />
       </td>
       ${repsCell}
@@ -1237,7 +1233,7 @@ async function handleFocusOut(e) {
   const weightInput = document.getElementById(`w-${cssId(exerciseName)}-${setNum}`);
   const isUnilateral = input.dataset.unilateral === '1';
 
-  const weight = parseFloat(weightInput?.value);
+  const weight = parseWeight(weightInput?.value);
 
   let logData;
   if (isUnilateral) {
@@ -1405,7 +1401,7 @@ async function handleClick(e) {
       const rows = tbody.querySelectorAll('.set-row');
       rows.forEach((row, i) => {
         const setNum = i + 1;
-        const weight = parseFloat(document.getElementById(`w-${cssId(exercise.name)}-${setNum}`)?.value);
+        const weight = parseWeight(document.getElementById(`w-${cssId(exercise.name)}-${setNum}`)?.value);
         if (!weight) return; // skip empty rows
         const rirVal = document.getElementById(`rir-${cssId(exercise.name)}-${setNum}`)?.value;
         const rir = rirVal !== '' && rirVal != null ? parseInt(rirVal) : null;
@@ -1441,13 +1437,13 @@ async function handleClick(e) {
         showToast('Novo recorde!\n' + prNames, 'success');
       }
       const photoToUpload = state.pendingPhoto;
-      const finishMsgs = MSGS[getProfile()].finish;
-      const finishMsg = finishMsgs[Math.floor(Math.random() * finishMsgs.length)];
+      const finishMsg = MSGS.finish[Math.floor(Math.random() * MSGS.finish.length)];
       state.activeWorkout = null;
       state.activeExercises = [];
       state.loggedSets = {};
       state.activeBrio = null;
       state.pendingPhoto = null;
+      clearWorkoutDraft();
       document.body.classList.remove('mode-brio', 'mode-sem-brio');
       if (photoToUpload) {
         try { await api.uploadPhoto(completedId, photoToUpload); } catch (_) {}
@@ -1471,6 +1467,7 @@ async function handleClick(e) {
       state.loggedSets = {};
       state.activeBrio = null;
       state.pendingPhoto = null;
+      clearWorkoutDraft();
       document.body.classList.remove('mode-brio', 'mode-sem-brio');
       navigate('dashboard');
     } catch (ex) {
@@ -1623,7 +1620,7 @@ function showEditLogModal(workoutId, logId, current) {
     <form id="edit-log-form">
       <div class="form-group">
         <label class="form-label">Peso (kg)</label>
-        <input class="form-input" name="weight" type="number" step="0.5" min="0"
+        <input class="form-input" name="weight" type="text" inputmode="decimal"
           value="${current.weight}" placeholder="kg" required />
       </div>
       ${isUni ? `
@@ -1660,7 +1657,7 @@ function showEditLogModal(workoutId, logId, current) {
     try {
       const rirInput = e.target.rir?.value;
       const data = {
-        weight: parseFloat(e.target.weight?.value) || null,
+        weight: parseWeight(e.target.weight?.value) || null,
         reps: parseInt(e.target.reps?.value) || null,
         reps_left: parseInt(e.target.reps_left?.value) || null,
         reps_right: parseInt(e.target.reps_right?.value) || null,
@@ -1756,7 +1753,7 @@ function showAddLogToWorkoutModal(workoutId, exerciseName, setNum, isUnilateral)
     <form id="add-log-form">
       <div class="form-group">
         <label class="form-label">Peso (kg)</label>
-        <input class="form-input" name="weight" type="number" step="0.5" min="0" placeholder="kg" required autofocus />
+        <input class="form-input" name="weight" type="text" inputmode="decimal" placeholder="kg" required autofocus />
       </div>
       ${isUnilateral ? `
       <div class="form-group">
@@ -1791,7 +1788,7 @@ function showAddLogToWorkoutModal(workoutId, exerciseName, setNum, isUnilateral)
       await api.addLog(workoutId, {
         exercise_name: exerciseName,
         set_number: setNum,
-        weight: parseFloat(e.target.weight?.value) || null,
+        weight: parseWeight(e.target.weight?.value) || null,
         reps: parseInt(e.target.reps?.value) || null,
         reps_left: parseInt(e.target.reps_left?.value) || null,
         reps_right: parseInt(e.target.reps_right?.value) || null,
@@ -1850,6 +1847,13 @@ function showAddExerciseModal(templateId) {
 // ─────────────────────────────────────────────
 //  Boot
 // ─────────────────────────────────────────────
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && state.view === 'workout') saveWorkoutDraft();
+});
+window.addEventListener('pagehide', () => {
+  if (state.view === 'workout') saveWorkoutDraft();
+});
+
 if (state.token) {
   navigate('dashboard');
 } else {
