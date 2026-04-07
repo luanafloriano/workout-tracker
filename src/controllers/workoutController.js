@@ -353,6 +353,7 @@ async function getProgress(req, res) {
 
 async function getFeed(req, res) {
   try {
+    // Mostra seus próprios treinos + treinos de quem te segue mutuamente
     const result = await db.query(
       `SELECT w.id, w.template_name, w.completed_at, w.brio, w.photo_url, w.notes,
               u.id AS user_id, u.name AS user_name,
@@ -362,6 +363,13 @@ async function getFeed(req, res) {
        FROM workouts w
        JOIN users u ON w.user_id = u.id
        WHERE w.completed_at IS NOT NULL
+         AND (
+           w.user_id = $1
+           OR (
+             EXISTS(SELECT 1 FROM follows WHERE follower_id = $1 AND following_id = w.user_id)
+             AND EXISTS(SELECT 1 FROM follows WHERE follower_id = w.user_id AND following_id = $1)
+           )
+         )
        ORDER BY w.completed_at DESC
        LIMIT 50`,
       [req.user.id]

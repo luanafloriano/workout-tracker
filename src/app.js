@@ -5,6 +5,7 @@ const path = require('path');
 const authRoutes = require('./routes/auth');
 const templateRoutes = require('./routes/templates');
 const workoutRoutes = require('./routes/workouts');
+const followRoutes = require('./routes/follow');
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 app.use('/api/auth', authRoutes);
 app.use('/api/templates', templateRoutes);
 app.use('/api/workouts', workoutRoutes);
+app.use('/api', followRoutes);
 
 // Serve frontend for all other routes (SPA fallback)
 app.get('*', (req, res) => {

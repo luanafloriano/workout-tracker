@@ -79,6 +79,14 @@ CREATE TABLE IF NOT EXISTS workout_comments (
   created_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Sistema de follows
+CREATE TABLE IF NOT EXISTS follows (
+  follower_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  following_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at   TIMESTAMP DEFAULT NOW(),
+  PRIMARY KEY (follower_id, following_id)
+);
+
 -- Indexes for common queries
 CREATE INDEX IF NOT EXISTS idx_workout_templates_user ON workout_templates(user_id);
 CREATE INDEX IF NOT EXISTS idx_template_exercises_template ON template_exercises(template_id);

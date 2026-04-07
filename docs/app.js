@@ -157,6 +157,10 @@ const api = {
   getComments: (workoutId) => apiFetch('GET', `/workouts/${workoutId}/comments`),
   postComment: (workoutId, body) => apiFetch('POST', `/workouts/${workoutId}/comments`, { body }),
   deleteComment: (workoutId, commentId) => apiFetch('DELETE', `/workouts/${workoutId}/comments/${commentId}`),
+
+  getUsers: () => apiFetch('GET', '/users'),
+  follow: (id) => apiFetch('POST', `/follow/${id}`),
+  unfollow: (id) => apiFetch('DELETE', `/follow/${id}`),
 };
 
 // ─────────────────────────────────────────────
@@ -210,6 +214,7 @@ function render() {
     'workout-detail': () => renderWorkoutDetail(state.params.id),
     'workout-readonly': () => renderWorkoutReadonly(state.params.id),
     feed: renderFeed,
+    people: renderPeople,
     partner: renderPartner,
     'partner-detail': () => renderPartnerWorkoutDetail(state.params.id),
     'exercise-progress': () => renderExerciseProgress(state.params.name),
@@ -293,6 +298,7 @@ function navHtml(activeView) {
     { view: 'dashboard', icon: '🏠', label: 'Home' },
     { view: 'templates', icon: '📋', label: 'Templates' },
     { view: 'feed', icon: '📸', label: 'Feed' },
+    { view: 'people', icon: '👥', label: 'Pessoas' },
     { view: 'history', icon: '📖', label: 'Histórico' },
   ];
   return `
@@ -985,6 +991,52 @@ async function renderWorkoutReadonly(id) {
 // ─────────────────────────────────────────────
 //  Feed View
 // ─────────────────────────────────────────────
+async function renderPeople() {
+  const users = await api.getUsers();
+
+  const cards = users.length === 0 ? `
+    <div class="empty-state">
+      <div class="empty-icon">👥</div>
+      <div class="empty-title">Nenhum usuário ainda</div>
+      <p class="empty-text">Quando outras pessoas se cadastrarem, elas aparecem aqui.</p>
+    </div>` :
+    users.map(u => {
+      const mutual = u.i_follow && u.follows_me;
+      const statusBadge = mutual
+        ? `<span style="font-size:0.75rem;color:#10b981">✓ Seguindo mutuamente</span>`
+        : u.i_follow
+          ? `<span style="font-size:0.75rem;color:#6b7280">Você segue · aguardando</span>`
+          : u.follows_me
+            ? `<span style="font-size:0.75rem;color:#f472b6">Te segue</span>`
+            : '';
+      const btn = u.i_follow
+        ? `<button class="btn" style="background:#f3f4f6;color:#374151;min-width:100px" data-action="unfollow" data-id="${u.id}">Deixar de seguir</button>`
+        : `<button class="btn btn-primary" style="min-width:100px" data-action="follow" data-id="${u.id}">Seguir</button>`;
+      return `
+        <div class="card" style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:14px 16px">
+          <div>
+            <div style="font-weight:600">${esc(u.name)}</div>
+            ${statusBadge}
+          </div>
+          ${btn}
+        </div>`;
+    }).join('');
+
+  return `
+    <div class="page">
+      <div class="page-header">
+        <h1>👥 Pessoas</h1>
+      </div>
+      <div class="page-content">
+        <p style="color:#6b7280;font-size:0.875rem;margin-bottom:16px">
+          O feed só mostra treinos de quem vocês se seguem mutuamente.
+        </p>
+        ${cards}
+      </div>
+      ${navHtml('people')}
+    </div>`;
+}
+
 async function renderFeed() {
   const posts = await api.getFeed();
 
@@ -1575,6 +1627,32 @@ async function handleClick(e) {
 
   if (action === 'open-comments') {
     showCommentsModal(btn.dataset.id);
+    return;
+  }
+
+  if (action === 'follow') {
+    const id = btn.dataset.id;
+    btn.disabled = true;
+    try {
+      await api.follow(id);
+      navigate('people');
+    } catch (ex) {
+      showToast(ex.message, 'error');
+      btn.disabled = false;
+    }
+    return;
+  }
+
+  if (action === 'unfollow') {
+    const id = btn.dataset.id;
+    btn.disabled = true;
+    try {
+      await api.unfollow(id);
+      navigate('people');
+    } catch (ex) {
+      showToast(ex.message, 'error');
+      btn.disabled = false;
+    }
     return;
   }
 }
