@@ -1,0 +1,27 @@
+name: Sync docs com public
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'public/**'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copiar public/ para docs/
+        run: cp -r public/. docs/
+
+      - name: Commit e push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/
+          git diff --staged --quiet || git commit -m "chore: sync docs com public [skip ci]"
+          git push
